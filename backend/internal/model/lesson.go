@@ -131,7 +131,7 @@ type Comment struct {
 
 // TableName 表名
 func (Comment) TableName() string {
-	return "comments"
+	return "lesson_comments"
 }
 
 // Favorite 收藏模型

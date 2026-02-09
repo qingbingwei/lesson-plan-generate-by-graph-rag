@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at TIMESTAMP
 );
 
+-- 兼容旧库：补齐软删除列（GORM gorm.DeletedAt 依赖）
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
+
 -- 用户表索引
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_username ON users(username);
@@ -65,6 +69,10 @@ CREATE TABLE IF NOT EXISTS lessons (
     published_at TIMESTAMP
 );
 
+-- 兼容旧库：补齐软删除列
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_lessons_deleted_at ON lessons(deleted_at);
+
 -- 教案表索引
 CREATE INDEX idx_lessons_user_id ON lessons(user_id);
 CREATE INDEX idx_lessons_subject ON lessons(subject);
@@ -88,6 +96,10 @@ CREATE TABLE IF NOT EXISTS lesson_versions (
     UNIQUE(lesson_id, version_number)
 );
 
+-- 兼容旧库：补齐软删除列
+ALTER TABLE lesson_versions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_lesson_versions_deleted_at ON lesson_versions(deleted_at);
+
 -- 版本表索引
 CREATE INDEX idx_lesson_versions_lesson_id ON lesson_versions(lesson_id);
 CREATE INDEX idx_lesson_versions_created_at ON lesson_versions(created_at DESC);
@@ -103,6 +115,10 @@ CREATE TABLE IF NOT EXISTS lesson_comments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 兼容旧库：补齐软删除列
+ALTER TABLE lesson_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_lesson_comments_deleted_at ON lesson_comments(deleted_at);
 
 -- 评论表索引
 CREATE INDEX idx_lesson_comments_lesson_id ON lesson_comments(lesson_id);

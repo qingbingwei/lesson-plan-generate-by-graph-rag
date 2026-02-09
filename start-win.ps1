@@ -176,6 +176,42 @@ function Invoke-DockerCompose([string[]]$Arguments) {
   }
 }
 
+function Ensure-PostgresCompatibility([string]$ProjectDirPath) {
+  $sql = @"
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
+
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_lessons_deleted_at ON lessons(deleted_at);
+
+ALTER TABLE lesson_versions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_lesson_versions_deleted_at ON lesson_versions(deleted_at);
+
+ALTER TABLE lesson_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_lesson_comments_deleted_at ON lesson_comments(deleted_at);
+"@
+
+  if (-not (Test-CommandAvailable -Name 'docker')) {
+    return
+  }
+
+  $escapedSql = $sql.Replace("`r", '').Replace("`n", ' ')
+
+  try {
+    Push-Location $ProjectDirPath
+    docker exec lesson-plan-postgres env "PGPASSWORD=$($env:POSTGRES_PASSWORD)" psql -U admin -d lesson_plan -c $escapedSql *> $null
+    if ($LASTEXITCODE -eq 0) {
+      Write-Ok -Text 'PostgreSQL schema compatibility check completed.'
+    }
+  }
+  catch {
+    Write-WarnText 'PostgreSQL compatibility patch skipped. You can run database/postgres/init.sql manually if needed.'
+  }
+  finally {
+    Pop-Location
+  }
+}
+
 function Start-BackgroundCommand(
   [string]$ServiceName,
   [string]$WorkingDirectory,
@@ -327,6 +363,8 @@ else {
     if (-not ($postgresReady -and $redisReady -and $neo4jReady)) {
       throw 'Required dependency containers are not ready. Check `docker compose logs`.'
     }
+
+    Ensure-PostgresCompatibility -ProjectDirPath $ProjectDir
 
     Write-Ok -Text 'Dependency containers are ready.'
   }
