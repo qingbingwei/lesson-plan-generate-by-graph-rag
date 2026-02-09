@@ -1,16 +1,7 @@
-import { z } from 'zod';
-import { getDeepSeekClient } from '../clients/deepseek';
+import { getClient } from '../clients';
 import logger from '../utils/logger';
+import type { Skill } from './index';
 import type { LessonObjectives, KnowledgeContext, GenerateLessonRequest, TokenUsage } from '../types';
-
-// Skill 定义 Schema
-const SkillSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  content: z.string(),
-});
-
-type Skill = z.infer<typeof SkillSchema>;
 
 /**
  * 教学目标生成 Skill 定义
@@ -52,16 +43,6 @@ export const objectiveGenerationSkill: Skill = {
 }
 `,
 };
-
-// DeepSeek 客户端（单例）
-let deepseekClient: ReturnType<typeof getDeepSeekClient> | null = null;
-
-function getClient() {
-  if (!deepseekClient) {
-    deepseekClient = getDeepSeekClient();
-  }
-  return deepseekClient;
-}
 
 /**
  * 构建系统提示词

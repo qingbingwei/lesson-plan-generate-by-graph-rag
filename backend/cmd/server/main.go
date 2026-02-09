@@ -50,7 +50,6 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to init postgres: " + err.Error())
 	}
-	_ = db
 	logger.Info("PostgreSQL connected")
 
 	// 初始化Neo4j
@@ -77,21 +76,21 @@ func main() {
 		cfg.JWT.Issuer,
 	)
 
-	// 初始化Repository
-	gormDB := database.GetDB()
-	userRepo := repository.NewUserRepository(gormDB)
-	lessonRepo := repository.NewLessonRepository(gormDB)
-	commentRepo := repository.NewCommentRepository(gormDB)
-	favoriteRepo := repository.NewFavoriteRepository(gormDB)
-	likeRepo := repository.NewLikeRepository(gormDB)
-	generationRepo := repository.NewGenerationRepository(gormDB)
+	// 初始化Repository - 直接使用返回的 db 实例，而非全局 GetDB()
+	userRepo := repository.NewUserRepository(db)
+	lessonRepo := repository.NewLessonRepository(db)
+	commentRepo := repository.NewCommentRepository(db)
+	favoriteRepo := repository.NewFavoriteRepository(db)
+	likeRepo := repository.NewLikeRepository(db)
+	generationRepo := repository.NewGenerationRepository(db)
 	knowledgeRepo := repository.NewKnowledgeRepository(neo4jDriver, &cfg.Database.Neo4j)
-	documentRepo := repository.NewDocumentRepository(gormDB)
+	documentRepo := repository.NewDocumentRepository(db)
+	versionRepo := repository.NewVersionRepository(db)
 
 	// 初始化Service
 	authService := service.NewAuthService(userRepo, jwtManager)
 	userService := service.NewUserService(userRepo, lessonRepo, favoriteRepo)
-	lessonService := service.NewLessonService(lessonRepo, favoriteRepo, likeRepo)
+	lessonService := service.NewLessonService(lessonRepo, favoriteRepo, likeRepo, versionRepo)
 	commentService := service.NewCommentService(commentRepo, lessonRepo)
 	favoriteService := service.NewFavoriteService(favoriteRepo, lessonRepo)
 	likeService := service.NewLikeService(likeRepo, lessonRepo)

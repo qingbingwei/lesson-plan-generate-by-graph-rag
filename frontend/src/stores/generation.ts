@@ -3,6 +3,52 @@ import { ref } from 'vue';
 import type { GenerateLessonRequest, GeneratedLesson, GenerationProgress } from '@/types';
 import * as generationApi from '@/api/generation';
 
+// --- 共享解析工具 ---
+
+/** 解析教学目标（后端返回的是格式化字符串） */
+function parseObjectives(text: string) {
+  const knowledge = text.match(/【知识与技能】\n([\s\S]*?)(?=\n\n【|$)/)?.[1]?.trim() || '';
+  const process = text.match(/【过程与方法】\n([\s\S]*?)(?=\n\n【|$)/)?.[1]?.trim() || '';
+  const emotion = text.match(/【情感态度价值观】\n([\s\S]*?)$/)?.[1]?.trim() || '';
+  return { knowledge, process, emotion };
+}
+
+/** 解析列表格式的字符串（如 "1. xxx\n2. yyy"） */
+function parseList(text: string): string[] {
+  if (!text) return [];
+  return text.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+}
+
+/** 将后端响应转换为前端 GeneratedLesson 结构 */
+function toGeneratedLesson(response: Record<string, any>, request: GenerateLessonRequest): GeneratedLesson {
+  const objectives = response.objectives ? parseObjectives(response.objectives) : { knowledge: '', process: '', emotion: '' };
+  return {
+    title: response.title || request.topic,
+    objectives,
+    keyPoints: parseList(response.key_points || ''),
+    difficultPoints: parseList(response.difficult_points || ''),
+    teachingMethods: parseList(response.teaching_methods || ''),
+    content: {
+      sections: [
+        {
+          title: '新课讲授',
+          duration: request.duration - 10,
+          teacherActivity: response.content || '',
+          studentActivity: response.activities || '',
+          content: response.content || '',
+        },
+      ],
+      materials: response.resources ? [response.resources] : [],
+      homework: response.assessment || '',
+    },
+    evaluation: response.assessment || '',
+  };
+}
+
+// --- 进度动画管理 ---
+
+const WORKFLOW_STEPS = ['inputAnalysis', 'knowledgeQuery', 'objectiveDesign', 'contentDesign', 'activityDesign', 'outputFormat'] as const;
+
 export const useGenerationStore = defineStore('generation', () => {
   // 状态
   const isGenerating = ref(false);
@@ -37,192 +83,158 @@ export const useGenerationStore = defineStore('generation', () => {
     }
   }
 
-  // 生成教案
+  // 生成教案（非流式 - 用后端API，显示等待状态）
   async function generateLesson(request: GenerateLessonRequest) {
     isGenerating.value = true;
     generatedLesson.value = null;
     error.value = null;
     initProgress();
 
-    // 使用定时器模拟进度更新，后端生成需要时间
-    let progressInterval: ReturnType<typeof setInterval> | null = null;
-    let currentStepIndex = 0;
-    const steps = ['inputAnalysis', 'knowledgeQuery', 'objectiveDesign', 'contentDesign', 'activityDesign', 'outputFormat'];
-    
-    // 启动进度动画
-    const startProgressAnimation = () => {
-      updateProgress(steps[0], 'running');
-      progressInterval = setInterval(() => {
-        if (currentStepIndex < steps.length - 1) {
-          // 完成当前步骤
-          updateProgress(steps[currentStepIndex], 'completed');
-          currentStepIndex++;
-          // 开始下一步骤
-          updateProgress(steps[currentStepIndex], 'running');
-        }
-      }, 8000); // 每8秒推进一步，给足够时间让API返回
-    };
+    // 标记第一步为运行中
+    updateProgress(WORKFLOW_STEPS[0], 'running');
 
     try {
-      startProgressAnimation();
       const result = await generationApi.generateLesson(request);
       
-      // 清除定时器
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-      }
-      
       if (result.status === 'completed') {
-        // 解析教学目标（后端返回的是格式化字符串）
-        const parseObjectives = (text: string) => {
-          const knowledge = text.match(/【知识与技能】\n([\s\S]*?)(?=\n\n【|$)/)?.[1]?.trim() || '';
-          const process = text.match(/【过程与方法】\n([\s\S]*?)(?=\n\n【|$)/)?.[1]?.trim() || '';
-          const emotion = text.match(/【情感态度价值观】\n([\s\S]*?)$/)?.[1]?.trim() || '';
-          return { knowledge, process, emotion };
-        };
-
-        // 解析列表格式的字符串（如 "1. xxx\n2. yyy"）
-        const parseList = (text: string): string[] => {
-          if (!text) return [];
-          return text.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
-        };
-
-        const objectives = result.objectives ? parseObjectives(result.objectives) : { knowledge: '', process: '', emotion: '' };
-
-        // 转换后端返回的简单结构为前端期望的复杂结构
-        generatedLesson.value = {
-          title: result.title || request.topic,
-          objectives,
-          keyPoints: parseList(result.key_points || ''),
-          difficultPoints: parseList(result.difficult_points || ''),
-          teachingMethods: parseList(result.teaching_methods || ''),
-          content: {
-            sections: [
-              {
-                title: '新课讲授',
-                duration: request.duration - 10,
-                teacherActivity: result.content || '',
-                studentActivity: result.activities || '',
-                content: result.content || '',
-              },
-            ],
-            materials: result.resources ? [result.resources] : [],
-            homework: result.assessment || '',
-          },
-          evaluation: result.assessment || '',
-        };
+        generatedLesson.value = toGeneratedLesson(result, request);
         // 标记所有节点为完成
-        progress.value.forEach(p => {
-          p.status = 'completed';
-        });
+        progress.value.forEach(p => { p.status = 'completed'; });
       } else {
         error.value = result.error_message || '生成失败';
       }
     } catch (err) {
-      // 清除定时器
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-      }
       error.value = err instanceof Error ? err.message : '生成失败';
     } finally {
       isGenerating.value = false;
     }
   }
 
-  // 流式生成教案（改用普通接口，因为后端暂不支持流式）
+  // 流式生成教案（通过 Agent SSE 获取真实节点进度）
   async function streamGenerateLesson(request: GenerateLessonRequest) {
     isGenerating.value = true;
     generatedLesson.value = null;
     error.value = null;
     initProgress();
 
-    // 使用定时器模拟进度更新
-    let progressInterval: ReturnType<typeof setInterval> | null = null;
-    let currentStepIndex = 0;
-    const steps = ['inputAnalysis', 'knowledgeQuery', 'objectiveDesign', 'contentDesign', 'activityDesign', 'outputFormat'];
-    
-    // 启动进度动画
-    const startProgressAnimation = () => {
-      updateProgress(steps[0], 'running');
-      progressInterval = setInterval(() => {
-        if (currentStepIndex < steps.length - 1) {
-          updateProgress(steps[currentStepIndex], 'completed');
-          currentStepIndex++;
-          updateProgress(steps[currentStepIndex], 'running');
-        }
-      }, 8000);
-    };
+    // 标记第一步为运行中
+    updateProgress(WORKFLOW_STEPS[0], 'running');
 
     try {
-      startProgressAnimation();
-      
-      // 调用后端生成接口（会等待完成）
-      const response = await generationApi.generateLesson(request);
-      
-      // 清除定时器
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-      }
-      
-      // 生成完成，标记所有步骤为完成
-      updateProgress('inputAnalysis', 'completed');
-      updateProgress('knowledgeQuery', 'completed');
-      updateProgress('objectiveDesign', 'completed');
-      updateProgress('contentDesign', 'completed');
-      updateProgress('activityDesign', 'completed');
-      updateProgress('outputFormat', 'completed');
-      
-      // 解析教学目标和列表
-      const parseObjectives = (text: string) => {
-        const knowledge = text.match(/【知识与技能】\n([\s\S]*?)(?=\n\n【|$)/)?.[1]?.trim() || '';
-        const process = text.match(/【过程与方法】\n([\s\S]*?)(?=\n\n【|$)/)?.[1]?.trim() || '';
-        const emotion = text.match(/【情感态度价值观】\n([\s\S]*?)$/)?.[1]?.trim() || '';
-        return { knowledge, process, emotion };
-      };
+      // 获取 auth token
+      let token = '';
+      try {
+        const authData = localStorage.getItem('auth');
+        if (authData) {
+          const parsed = JSON.parse(authData);
+          token = parsed.token || '';
+        }
+      } catch { /* ignore */ }
 
-      const parseList = (text: string): string[] => {
-        if (!text) return [];
-        return text.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
-      };
+      const controller = new AbortController();
+      cancelFn.value = () => controller.abort();
 
-      const objectives = response.objectives ? parseObjectives(response.objectives) : { knowledge: '', process: '', emotion: '' };
-
-      // 转换后端返回的简单结构为前端期望的复杂结构
-      generatedLesson.value = {
-        title: response.title || request.topic,
-        objectives,
-        keyPoints: parseList(response.key_points || ''),
-        difficultPoints: parseList(response.difficult_points || ''),
-        teachingMethods: parseList(response.teaching_methods || ''),
-        content: {
-          sections: [
-            {
-              title: '新课讲授',
-              duration: request.duration - 10,
-              teacherActivity: response.content || '',
-              studentActivity: response.activities || '',
-              content: response.content || '',
-            },
-          ],
-          materials: response.resources ? [response.resources] : [],
-          homework: response.assessment || '',
+      const response = await fetch('/agent/generate/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-        evaluation: response.assessment || '',
-        reflection: '',
-      };
-    } catch (err) {
-      // 清除定时器
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`生成失败: HTTP ${response.status}`);
       }
-      error.value = err instanceof Error ? err.message : '生成失败';
-      // 标记当前步骤为错误
-      if (currentStepIndex < steps.length) {
-        updateProgress(steps[currentStepIndex], 'error', error.value);
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('无响应流');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let lastCompletedNode = '';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let finalState: Record<string, any> = {};
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+
+          try {
+            const event = JSON.parse(data) as { node: string; state: Record<string, unknown> };
+            const nodeName = event.node;
+
+            // 标记已完成节点和下一个运行中的节点
+            if (WORKFLOW_STEPS.includes(nodeName as typeof WORKFLOW_STEPS[number])) {
+              // 标记之前运行中的节点为完成
+              if (lastCompletedNode) {
+                updateProgress(lastCompletedNode, 'completed');
+              }
+              // 当前节点完成
+              updateProgress(nodeName, 'completed');
+              lastCompletedNode = nodeName;
+
+              // 标记下一个节点为运行中
+              const idx = WORKFLOW_STEPS.indexOf(nodeName as typeof WORKFLOW_STEPS[number]);
+              if (idx < WORKFLOW_STEPS.length - 1) {
+                updateProgress(WORKFLOW_STEPS[idx + 1], 'running');
+              }
+
+              // 合并状态用于最终结果
+              if (event.state) {
+                finalState = { ...finalState, ...event.state };
+              }
+            }
+
+            // 检查错误
+            if (event.state?.error) {
+              error.value = event.state.error as string;
+              updateProgress(nodeName, 'error', error.value);
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+
+      // 所有步骤完成
+      if (!error.value) {
+        WORKFLOW_STEPS.forEach(step => updateProgress(step, 'completed'));
+        
+        // 从最终状态的 output 字段构建结果
+        if (finalState.output) {
+          generatedLesson.value = {
+            title: finalState.output.title || request.topic,
+            objectives: finalState.output.objectives || { knowledge: '', process: '', emotion: '' },
+            keyPoints: finalState.output.keyPoints || [],
+            difficultPoints: finalState.output.difficultPoints || [],
+            teachingMethods: finalState.output.teachingMethods || [],
+            content: finalState.output.content || { sections: [], materials: [], homework: '' },
+            evaluation: finalState.output.evaluation || '',
+            reflection: finalState.output.reflection || '',
+          };
+        } else {
+          error.value = '生成完成但未收到结果数据';
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        error.value = '已取消生成';
+      } else {
+        error.value = err instanceof Error ? err.message : '生成失败';
+      }
+      // 标记当前运行中的步骤为错误
+      const currentStep = progress.value.find(p => p.status === 'running');
+      if (currentStep) {
+        updateProgress(currentStep.node, 'error', error.value);
       }
     } finally {
       isGenerating.value = false;

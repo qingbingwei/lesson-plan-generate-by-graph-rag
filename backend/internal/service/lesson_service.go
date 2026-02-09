@@ -59,28 +59,9 @@ type LessonService interface {
 	ListByUser(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.LessonListItem, int64, error)
 	Publish(ctx context.Context, id, userID uuid.UUID) error
 	Search(ctx context.Context, query string, page, pageSize int) ([]model.LessonListItem, int64, error)
-}
-
-// FavoriteService 收藏服务接口
-type FavoriteService interface {
-	Add(ctx context.Context, userID, lessonID uuid.UUID) error
-	Remove(ctx context.Context, userID, lessonID uuid.UUID) error
-	List(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.LessonListItem, int64, error)
-	IsFavorited(ctx context.Context, userID, lessonID uuid.UUID) (bool, error)
-}
-
-// LikeService 点赞服务接口
-type LikeService interface {
-	Like(ctx context.Context, userID, lessonID uuid.UUID) error
-	Unlike(ctx context.Context, userID, lessonID uuid.UUID) error
-	IsLiked(ctx context.Context, userID, lessonID uuid.UUID) (bool, error)
-}
-
-// CommentService 评论服务接口
-type CommentService interface {
-	Create(ctx context.Context, userID, lessonID uuid.UUID, content string, parentID *uuid.UUID) (*model.Comment, error)
-	Delete(ctx context.Context, id, userID uuid.UUID) error
-	List(ctx context.Context, lessonID uuid.UUID, page, pageSize int) ([]model.Comment, int64, error)
+	ListVersions(ctx context.Context, lessonID uuid.UUID, userID uuid.UUID) ([]model.LessonVersion, error)
+	GetVersion(ctx context.Context, lessonID uuid.UUID, version int, userID uuid.UUID) (*model.LessonVersion, error)
+	RollbackToVersion(ctx context.Context, lessonID uuid.UUID, version int, userID uuid.UUID) (*model.Lesson, error)
 }
 
 // lessonService 教案服务实现
@@ -88,6 +69,7 @@ type lessonService struct {
 	lessonRepo   repository.LessonRepository
 	favoriteRepo repository.FavoriteRepository
 	likeRepo     repository.LikeRepository
+	versionRepo  repository.VersionRepository
 }
 
 // NewLessonService 创建教案服务
@@ -95,11 +77,13 @@ func NewLessonService(
 	lessonRepo repository.LessonRepository,
 	favoriteRepo repository.FavoriteRepository,
 	likeRepo repository.LikeRepository,
+	versionRepo repository.VersionRepository,
 ) LessonService {
 	return &lessonService{
 		lessonRepo:   lessonRepo,
 		favoriteRepo: favoriteRepo,
 		likeRepo:     likeRepo,
+		versionRepo:  versionRepo,
 	}
 }
 
@@ -155,6 +139,7 @@ func (s *lessonService) GetByID(ctx context.Context, id uuid.UUID, currentUserID
 		Assessment:    lesson.Assessment,
 		Resources:     lesson.Resources,
 		Status:        lesson.Status,
+		Version:       lesson.Version,
 		ViewCount:     lesson.ViewCount + 1,
 		LikeCount:     lesson.LikeCount,
 		FavoriteCount: lesson.FavoriteCount,
@@ -195,6 +180,31 @@ func (s *lessonService) Update(ctx context.Context, id uuid.UUID, userID uuid.UU
 	if lesson.UserID != userID {
 		return nil, ErrUnauthorized
 	}
+
+	// 保存当前版本快照
+	if s.versionRepo != nil {
+		// 将当前教案内容打包为 JSON
+		contentSnapshot, _ := json.Marshal(map[string]interface{}{
+			"title":      lesson.Title,
+			"objectives": lesson.Objectives,
+			"content":    lesson.Content,
+			"activities": lesson.Activities,
+			"assessment": lesson.Assessment,
+			"resources":  lesson.Resources,
+			"subject":    lesson.Subject,
+			"grade":      lesson.Grade,
+			"duration":   lesson.Duration,
+		})
+		snapshot := &model.LessonVersion{
+			LessonID:  lesson.ID,
+			Content:   string(contentSnapshot),
+			CreatedBy: &userID,
+		}
+		_ = s.versionRepo.Create(ctx, snapshot)
+	}
+
+	// 递增版本号
+	lesson.Version++
 
 	if req.Title != "" {
 		lesson.Title = req.Title
@@ -327,6 +337,7 @@ func (s *lessonService) toListItem(l model.Lesson) model.LessonListItem {
 		Grade:         l.Grade,
 		Duration:      l.Duration,
 		Status:        l.Status,
+		Version:       l.Version,
 		ViewCount:     l.ViewCount,
 		LikeCount:     l.LikeCount,
 		FavoriteCount: l.FavoriteCount,
@@ -345,187 +356,96 @@ func (s *lessonService) toListItem(l model.Lesson) model.LessonListItem {
 	return item
 }
 
-// favoriteService 收藏服务实现
-type favoriteService struct {
-	favoriteRepo repository.FavoriteRepository
-	lessonRepo   repository.LessonRepository
-}
-
-// NewFavoriteService 创建收藏服务
-func NewFavoriteService(favoriteRepo repository.FavoriteRepository, lessonRepo repository.LessonRepository) FavoriteService {
-	return &favoriteService{
-		favoriteRepo: favoriteRepo,
-		lessonRepo:   lessonRepo,
-	}
-}
-
-func (s *favoriteService) Add(ctx context.Context, userID, lessonID uuid.UUID) error {
-	exists, _ := s.favoriteRepo.Exists(ctx, userID, lessonID)
-	if exists {
-		return nil
-	}
-
-	favorite := &model.Favorite{
-		UserID:   userID,
-		LessonID: lessonID,
-	}
-
-	if err := s.favoriteRepo.Create(ctx, favorite); err != nil {
-		return err
-	}
-
-	_ = s.lessonRepo.UpdateCounts(ctx, lessonID)
-	return nil
-}
-
-func (s *favoriteService) Remove(ctx context.Context, userID, lessonID uuid.UUID) error {
-	if err := s.favoriteRepo.Delete(ctx, userID, lessonID); err != nil {
-		return err
-	}
-
-	_ = s.lessonRepo.UpdateCounts(ctx, lessonID)
-	return nil
-}
-
-func (s *favoriteService) List(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.LessonListItem, int64, error) {
-	favorites, total, err := s.favoriteRepo.ListByUserID(ctx, userID, page, pageSize)
+func (s *lessonService) ListVersions(ctx context.Context, lessonID uuid.UUID, userID uuid.UUID) ([]model.LessonVersion, error) {
+	lesson, err := s.lessonRepo.GetByID(ctx, lessonID)
 	if err != nil {
-		return nil, 0, err
+		return nil, ErrLessonNotFound
+	}
+	if lesson.UserID != userID {
+		return nil, ErrUnauthorized
+	}
+	if s.versionRepo == nil {
+		return nil, nil
+	}
+	return s.versionRepo.ListByLessonID(ctx, lessonID)
+}
+
+func (s *lessonService) GetVersion(ctx context.Context, lessonID uuid.UUID, version int, userID uuid.UUID) (*model.LessonVersion, error) {
+	lesson, err := s.lessonRepo.GetByID(ctx, lessonID)
+	if err != nil {
+		return nil, ErrLessonNotFound
+	}
+	if lesson.UserID != userID {
+		return nil, ErrUnauthorized
+	}
+	if s.versionRepo == nil {
+		return nil, errors.New("版本功能未启用")
+	}
+	return s.versionRepo.GetByVersion(ctx, lessonID, version)
+}
+
+func (s *lessonService) RollbackToVersion(ctx context.Context, lessonID uuid.UUID, version int, userID uuid.UUID) (*model.Lesson, error) {
+	lesson, err := s.lessonRepo.GetByID(ctx, lessonID)
+	if err != nil {
+		return nil, ErrLessonNotFound
+	}
+	if lesson.UserID != userID {
+		return nil, ErrUnauthorized
+	}
+	if s.versionRepo == nil {
+		return nil, errors.New("版本功能未启用")
+	}
+	v, err := s.versionRepo.GetByVersion(ctx, lessonID, version)
+	if err != nil {
+		return nil, errors.New("版本不存在")
 	}
 
-	items := make([]model.LessonListItem, 0, len(favorites))
-	for _, f := range favorites {
-		if f.Lesson != nil {
-			item := model.LessonListItem{
-				ID:            f.Lesson.ID,
-				Title:         f.Lesson.Title,
-				Subject:       f.Lesson.Subject,
-				Grade:         f.Lesson.Grade,
-				Duration:      f.Lesson.Duration,
-				Status:        f.Lesson.Status,
-				ViewCount:     f.Lesson.ViewCount,
-				LikeCount:     f.Lesson.LikeCount,
-				FavoriteCount: f.Lesson.FavoriteCount,
-				CreatedAt:     f.Lesson.CreatedAt,
-				PublishedAt:   f.Lesson.PublishedAt,
-			}
-			if f.Lesson.User != nil {
-				item.AuthorName = f.Lesson.User.FullName
-				if item.AuthorName == "" {
-					item.AuthorName = f.Lesson.User.Username
-				}
-				item.AuthorAvatar = f.Lesson.User.AvatarURL
-			}
-			items = append(items, item)
+	// 先快照当前版本
+	contentSnapshot, _ := json.Marshal(map[string]interface{}{
+		"title":      lesson.Title,
+		"objectives": lesson.Objectives,
+		"content":    lesson.Content,
+		"activities": lesson.Activities,
+		"assessment": lesson.Assessment,
+		"resources":  lesson.Resources,
+		"subject":    lesson.Subject,
+		"grade":      lesson.Grade,
+		"duration":   lesson.Duration,
+	})
+	snapshot := &model.LessonVersion{
+		LessonID:      lesson.ID,
+		Content:       string(contentSnapshot),
+		ChangeSummary: fmt.Sprintf("回滚至版本 %d", version),
+		CreatedBy:     &userID,
+	}
+	_ = s.versionRepo.Create(ctx, snapshot)
+
+	// 从 JSON 中恢复各字段
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(v.Content), &data); err == nil {
+		if title, ok := data["title"].(string); ok && title != "" {
+			lesson.Title = title
+		}
+		if obj, ok := data["objectives"].(string); ok {
+			lesson.Objectives = obj
+		}
+		if content, ok := data["content"].(string); ok {
+			lesson.Content = content
+		}
+		if act, ok := data["activities"].(string); ok {
+			lesson.Activities = act
+		}
+		if assess, ok := data["assessment"].(string); ok {
+			lesson.Assessment = assess
+		}
+		if res, ok := data["resources"].(string); ok {
+			lesson.Resources = res
 		}
 	}
 
-	return items, total, nil
-}
-
-func (s *favoriteService) IsFavorited(ctx context.Context, userID, lessonID uuid.UUID) (bool, error) {
-	return s.favoriteRepo.Exists(ctx, userID, lessonID)
-}
-
-// likeService 点赞服务实现
-type likeService struct {
-	likeRepo   repository.LikeRepository
-	lessonRepo repository.LessonRepository
-}
-
-// NewLikeService 创建点赞服务
-func NewLikeService(likeRepo repository.LikeRepository, lessonRepo repository.LessonRepository) LikeService {
-	return &likeService{
-		likeRepo:   likeRepo,
-		lessonRepo: lessonRepo,
-	}
-}
-
-func (s *likeService) Like(ctx context.Context, userID, lessonID uuid.UUID) error {
-	exists, _ := s.likeRepo.Exists(ctx, userID, lessonID)
-	if exists {
-		return nil
-	}
-
-	like := &model.Like{
-		UserID:   userID,
-		LessonID: lessonID,
-	}
-
-	if err := s.likeRepo.Create(ctx, like); err != nil {
-		return err
-	}
-
-	_ = s.lessonRepo.UpdateCounts(ctx, lessonID)
-	return nil
-}
-
-func (s *likeService) Unlike(ctx context.Context, userID, lessonID uuid.UUID) error {
-	if err := s.likeRepo.Delete(ctx, userID, lessonID); err != nil {
-		return err
-	}
-
-	_ = s.lessonRepo.UpdateCounts(ctx, lessonID)
-	return nil
-}
-
-func (s *likeService) IsLiked(ctx context.Context, userID, lessonID uuid.UUID) (bool, error) {
-	return s.likeRepo.Exists(ctx, userID, lessonID)
-}
-
-// commentService 评论服务实现
-type commentService struct {
-	commentRepo repository.CommentRepository
-	lessonRepo  repository.LessonRepository
-}
-
-// NewCommentService 创建评论服务
-func NewCommentService(commentRepo repository.CommentRepository, lessonRepo repository.LessonRepository) CommentService {
-	return &commentService{
-		commentRepo: commentRepo,
-		lessonRepo:  lessonRepo,
-	}
-}
-
-func (s *commentService) Create(ctx context.Context, userID, lessonID uuid.UUID, content string, parentID *uuid.UUID) (*model.Comment, error) {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return nil, errors.New("评论内容不能为空")
-	}
-
-	comment := &model.Comment{
-		LessonID: lessonID,
-		UserID:   userID,
-		ParentID: parentID,
-		Content:  content,
-	}
-
-	if err := s.commentRepo.Create(ctx, comment); err != nil {
+	lesson.Version++
+	if err := s.lessonRepo.Update(ctx, lesson); err != nil {
 		return nil, err
 	}
-
-	_ = s.lessonRepo.UpdateCounts(ctx, lessonID)
-	return comment, nil
-}
-
-func (s *commentService) Delete(ctx context.Context, id, userID uuid.UUID) error {
-	comment, err := s.commentRepo.GetByID(ctx, id)
-	if err != nil {
-		return ErrCommentNotFound
-	}
-
-	if comment.UserID != userID {
-		return ErrUnauthorized
-	}
-
-	if err := s.commentRepo.Delete(ctx, id); err != nil {
-		return err
-	}
-
-	_ = s.lessonRepo.UpdateCounts(ctx, comment.LessonID)
-	return nil
-}
-
-func (s *commentService) List(ctx context.Context, lessonID uuid.UUID, page, pageSize int) ([]model.Comment, int64, error) {
-	return s.commentRepo.ListByLessonID(ctx, lessonID, page, pageSize)
+	return lesson, nil
 }

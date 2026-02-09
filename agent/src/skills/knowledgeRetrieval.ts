@@ -1,16 +1,7 @@
-import { z } from 'zod';
 import { getGraphRAG } from '../rag/graphRag';
 import logger from '../utils/logger';
+import type { Skill } from './index';
 import type { KnowledgeContext, GenerateLessonRequest } from '../types';
-
-// Skill 定义 Schema
-const SkillSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  content: z.string(),
-});
-
-type Skill = z.infer<typeof SkillSchema>;
 
 /**
  * 知识检索 Skill 定义

@@ -52,11 +52,13 @@ type KnowledgeGraph struct {
 
 // KnowledgeNode 知识图谱节点
 type KnowledgeNode struct {
-	ID      string `json:"id"`
-	Label   string `json:"label"`
-	Type    string `json:"type"`
-	Subject string `json:"subject"`
-	Grade   string `json:"grade"`
+	ID         string  `json:"id"`
+	Label      string  `json:"label"`
+	Type       string  `json:"type"`
+	Subject    string  `json:"subject"`
+	Grade      string  `json:"grade"`
+	Difficulty string  `json:"difficulty"`
+	Importance float64 `json:"importance"`
 }
 
 // KnowledgeEdge 知识图谱边

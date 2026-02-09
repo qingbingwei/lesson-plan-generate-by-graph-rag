@@ -1,6 +1,7 @@
 import neo4j, { Driver, Session, Record as Neo4jRecord } from 'neo4j-driver';
 import config from '../config';
 import logger from '../utils/logger';
+import { gradeToNumber } from '../utils/gradeNormalizer';
 import type { KnowledgeNode, KnowledgeLink, KnowledgePoint, SearchResult } from '../types';
 
 /**
@@ -31,22 +32,6 @@ class Neo4jTool {
   }
 
   /**
-   * 转换年级格式为数字格式
-   * "七年级" -> "7", "初一" -> "7", "高一" -> "10"
-   */
-  private normalizeGrade(grade: string): string {
-    const gradeMap: Record<string, string> = {
-      '一年级': '1', '二年级': '2', '三年级': '3', '四年级': '4', '五年级': '5', '六年级': '6',
-      '初一': '7', '初二': '8', '初三': '9',
-      '七年级': '7', '八年级': '8', '九年级': '9',
-      '高一': '10', '高二': '11', '高三': '12',
-      '1': '1', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6',
-      '7': '7', '8': '8', '9': '9', '10': '10', '11': '11', '12': '12',
-    };
-    return gradeMap[grade] || grade;
-  }
-
-  /**
    * 根据学科和年级查询知识点
    * @param subject 学科
    * @param grade 年级
@@ -60,7 +45,7 @@ class Neo4jTool {
     userId?: string
   ): Promise<KnowledgePoint[]> {
     const session = this.getSession();
-    const normalizedGrade = this.normalizeGrade(grade);
+    const normalizedGrade = gradeToNumber(grade);
     
     try {
       // 只查询用户自己创建的知识点（通过文档上传生成）
@@ -401,6 +386,7 @@ class Neo4jTool {
   async createKnowledgePoint(point: {
     id: string;
     name: string;
+    type?: string;
     description: string;
     difficulty: string;
     grade: string;
@@ -417,6 +403,7 @@ class Neo4jTool {
       const query = `
         MERGE (k:KnowledgePoint {id: $id})
         SET k.name = $name,
+            k.type = $type,
             k.description = $description,
             k.difficulty = $difficulty,
             k.grade = $grade,
@@ -433,6 +420,7 @@ class Neo4jTool {
       await session.run(query, {
         id: point.id,
         name: point.name,
+        type: point.type || 'KnowledgePoint',
         description: point.description,
         difficulty: point.difficulty,
         grade: point.grade,

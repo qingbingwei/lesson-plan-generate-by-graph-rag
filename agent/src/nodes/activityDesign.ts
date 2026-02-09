@@ -1,6 +1,7 @@
 import { generateMaterials, generateHomework, generateEvaluation } from '../skills';
 import logger from '../utils/logger';
-import type { WorkflowState, TokenUsage } from '../types';
+import { mergeUsage } from '../utils/tokenUsage';
+import type { WorkflowState } from '../types';
 
 /**
  * 活动设计节点
@@ -70,20 +71,6 @@ export async function activityDesignNode(state: WorkflowState): Promise<Partial<
       error: error instanceof Error ? error.message : 'Activity design failed',
     };
   }
-}
-
-/**
- * 合并 token 使用统计
- */
-function mergeUsage(...usages: (TokenUsage | undefined)[]): TokenUsage {
-  return usages.reduce<TokenUsage>(
-    (acc, usage) => ({
-      promptTokens: acc.promptTokens + (usage?.promptTokens || 0),
-      completionTokens: acc.completionTokens + (usage?.completionTokens || 0),
-      totalTokens: acc.totalTokens + (usage?.totalTokens || 0),
-    }),
-    { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
-  );
 }
 
 export default activityDesignNode;

@@ -29,6 +29,7 @@ type Lesson struct {
 	Resources     string         `gorm:"type:text" json:"resources"`
 	Status        string         `gorm:"size:20;default:'draft';index" json:"status"`
 	Tags          string         `gorm:"type:jsonb;default:'[]'" json:"tags"`
+	Version       int            `gorm:"default:1" json:"version"`
 	ViewCount     int            `gorm:"default:0" json:"view_count"`
 	LikeCount     int            `gorm:"default:0" json:"like_count"`
 	FavoriteCount int            `gorm:"default:0" json:"favorite_count"`
@@ -74,6 +75,7 @@ type LessonDetail struct {
 	Resources     string     `json:"resources"`
 	Status        string     `json:"status"`
 	Tags          []string   `json:"tags"`
+	Version       int        `json:"version"`
 	ViewCount     int        `json:"view_count"`
 	LikeCount     int        `json:"like_count"`
 	FavoriteCount int        `json:"favorite_count"`
@@ -84,6 +86,31 @@ type LessonDetail struct {
 	AuthorAvatar  string     `json:"author_avatar"`
 	IsFavorited   bool       `json:"is_favorited"`
 	IsLiked       bool       `json:"is_liked"`
+}
+
+// LessonVersion 教案版本历史
+type LessonVersion struct {
+	ID            uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	LessonID      uuid.UUID      `gorm:"type:uuid;index;not null" json:"lesson_id"`
+	VersionNumber int            `gorm:"column:version_number;not null" json:"version"`
+	Content       string         `gorm:"type:jsonb;not null" json:"content"`
+	ChangeSummary string         `gorm:"column:change_summary;type:text" json:"change_log"`
+	CreatedBy     *uuid.UUID     `gorm:"type:uuid" json:"created_by,omitempty"`
+	CreatedAt     time.Time      `json:"created_at"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// TableName 表名
+func (LessonVersion) TableName() string {
+	return "lesson_versions"
+}
+
+// BeforeCreate 创建前钩子
+func (v *LessonVersion) BeforeCreate(tx *gorm.DB) error {
+	if v.ID == uuid.Nil {
+		v.ID = uuid.New()
+	}
+	return nil
 }
 
 // Comment 评论模型
@@ -145,6 +172,7 @@ type LessonListItem struct {
 	Grade         string     `json:"grade"`
 	Duration      int        `json:"duration"`
 	Status        string     `json:"status"`
+	Version       int        `json:"version"`
 	ViewCount     int        `json:"view_count"`
 	LikeCount     int        `json:"like_count"`
 	FavoriteCount int        `json:"favorite_count"`

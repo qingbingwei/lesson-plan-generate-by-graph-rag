@@ -51,6 +51,25 @@ const styles = [
   { value: 'flipped', label: '翻转课堂' },
 ];
 
+// 常用模板
+const templates = [
+  { label: '小学数学 · 分数', subject: '数学', grade: '五年级', topic: '分数的加法和减法', duration: 40, style: 'interactive' },
+  { label: '初中语文 · 古诗', subject: '语文', grade: '七年级', topic: '唐诗三百首赏析', duration: 45, style: '' },
+  { label: '高中物理 · 力学', subject: '物理', grade: '高一', topic: '牛顿第二定律', duration: 45, style: 'lecture' },
+  { label: '初中英语 · 阅读', subject: '英语', grade: '八年级', topic: 'Reading Comprehension Strategy', duration: 45, style: 'interactive' },
+  { label: '小学科学 · 实验', subject: '科学', grade: '四年级', topic: '植物的生长与变化', duration: 40, style: 'project' },
+  { label: '高中化学 · 反应', subject: '化学', grade: '高二', topic: '化学反应速率与化学平衡', duration: 45, style: 'lecture' },
+];
+
+function applyTemplate(tpl: typeof templates[number]) {
+  form.value.subject = tpl.subject;
+  form.value.grade = tpl.grade;
+  form.value.topic = tpl.topic;
+  form.value.duration = tpl.duration;
+  form.value.style = tpl.style;
+  form.value.requirements = '';
+}
+
 // 状态
 const isGenerating = computed(() => generationStore.isGenerating);
 const progress = computed(() => generationStore.progress);
@@ -176,10 +195,30 @@ function getProgressColor(status: string) {
   <div class="max-w-4xl mx-auto space-y-8">
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">生成教案</h1>
-      <p class="mt-1 text-sm text-gray-500">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">生成教案</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
         填写基本信息，让 AI 为您智能生成教案
       </p>
+    </div>
+
+    <!-- 常用模板 -->
+    <div v-if="!isGenerating && !generatedLesson">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">快捷模板</h3>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <button
+          v-for="tpl in templates"
+          :key="tpl.label"
+          type="button"
+          class="px-3 py-2.5 text-xs text-left rounded-lg border border-gray-200 dark:border-gray-700
+                 bg-white dark:bg-gray-800 hover:border-primary-300 dark:hover:border-primary-600
+                 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors
+                 text-gray-700 dark:text-gray-300"
+          @click="applyTemplate(tpl)"
+        >
+          <span class="font-medium block truncate">{{ tpl.label }}</span>
+          <span class="text-gray-400 dark:text-gray-500 mt-0.5 block">{{ tpl.duration }}分钟</span>
+        </button>
+      </div>
     </div>
 
     <!-- Form -->
@@ -345,13 +384,13 @@ function getProgressColor(status: string) {
 
     <!-- Generated Lesson Preview -->
     <div v-if="generatedLesson && !isGenerating" class="card">
-      <div class="card-header flex items-center justify-between">
+      <div class="card-header flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h3 class="font-medium">生成结果</h3>
         <div class="flex items-center gap-2">
           <span v-if="saveError" class="text-sm text-red-500">{{ saveError }}</span>
           <button
             type="button"
-            class="btn-outline btn-sm"
+            class="btn-outline btn-sm flex-1 sm:flex-none"
             @click="handleRegenerate"
             :disabled="isSaving"
           >
@@ -359,7 +398,7 @@ function getProgressColor(status: string) {
           </button>
           <button
             type="button"
-            class="btn-primary btn-sm"
+            class="btn-primary btn-sm flex-1 sm:flex-none"
             @click="handleSave"
             :disabled="isSaving"
           >
@@ -374,13 +413,13 @@ function getProgressColor(status: string) {
       <div class="card-body space-y-6">
         <!-- 标题 -->
         <div>
-          <h2 class="text-xl font-bold text-gray-900">{{ generatedLesson.title }}</h2>
+          <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">{{ generatedLesson.title }}</h2>
         </div>
 
         <!-- 教学目标 -->
         <div>
-          <h4 class="font-medium text-gray-900 mb-2">教学目标</h4>
-          <div class="space-y-2 text-sm text-gray-600">
+          <h4 class="font-medium text-gray-900 dark:text-gray-100 mb-2">教学目标</h4>
+          <div class="space-y-2 text-sm text-gray-600 dark:text-gray-400">
             <p><strong>知识与技能：</strong>{{ generatedLesson.objectives.knowledge }}</p>
             <p><strong>过程与方法：</strong>{{ generatedLesson.objectives.process }}</p>
             <p><strong>情感态度价值观：</strong>{{ generatedLesson.objectives.emotion }}</p>
@@ -428,7 +467,7 @@ function getProgressColor(status: string) {
             <div
               v-for="(section, index) in generatedLesson.content.sections"
               :key="index"
-              class="p-4 bg-gray-50 rounded-lg"
+              class="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg"
             >
               <div class="flex items-center justify-between mb-2">
                 <h5 class="font-medium text-gray-900">{{ section.title }}</h5>

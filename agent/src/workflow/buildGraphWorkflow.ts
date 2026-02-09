@@ -54,6 +54,33 @@ interface BuildGraphState {
 const neo4jTool = getNeo4jTool();
 const deepseekClient = getDeepSeekClient();
 
+// 有效的节点类型及其别名映射
+const TYPE_ALIASES: Record<string, string> = {
+  // 标准类型
+  subject: 'Subject', chapter: 'Chapter', knowledgepoint: 'KnowledgePoint',
+  skill: 'Skill', concept: 'Concept', principle: 'Principle',
+  formula: 'Formula', example: 'Example',
+  // 中文别名
+  '学科': 'Subject', '章节': 'Chapter', '知识点': 'KnowledgePoint',
+  '技能': 'Skill', '概念': 'Concept', '原理': 'Principle',
+  '公式': 'Formula', '示例': 'Example', '例题': 'Example',
+  '定理': 'Principle', '法则': 'Principle', '规律': 'Principle',
+  '方法': 'Skill', '技巧': 'Skill',
+};
+const VALID_TYPES = new Set(Object.values(TYPE_ALIASES));
+
+/** 将 LLM 返回的 type 标准化为有效枚举值 */
+function normalizeType(raw: string | undefined): string {
+  if (!raw) return 'KnowledgePoint';
+  // 优先精确匹配
+  if (VALID_TYPES.has(raw)) return raw;
+  // 忽略大小写匹配
+  const alias = TYPE_ALIASES[raw.toLowerCase()];
+  if (alias) return alias;
+  // 默认
+  return 'KnowledgePoint';
+}
+
 /**
  * 文档分块节点
  */
@@ -103,8 +130,10 @@ async function extractEntitiesNode(state: BuildGraphState): Promise<Partial<Buil
     try {
       const prompt = `请从以下教育文本中提取知识点实体。每个实体需要包含：
 - name: 实体名称
-- type: 实体类型（KnowledgePoint/Concept/Principle/Formula/Example）
+- type: 实体类型，必须是以下之一：Subject（学科）、Chapter（章节）、KnowledgePoint（知识点）、Skill（技能）、Concept（概念）、Principle（原理）、Formula（公式）、Example（示例）
 - description: 简短描述
+- difficulty: 难度等级，必须是 easy/medium/hard 之一，根据内容的复杂程度判断
+- importance: 重要程度，0-1之间的小数，核心知识点接近1，辅助性知识点接近0.3
 
 文本内容：
 ${chunk}
@@ -113,7 +142,7 @@ ${state.request.subject ? `学科：${state.request.subject}` : ''}
 ${state.request.grade ? `年级：${state.request.grade}` : ''}
 
 请以JSON数组格式返回实体列表：
-[{"name": "...", "type": "...", "description": "..."}]
+[{"name": "...", "type": "...", "description": "...", "difficulty": "...", "importance": 0.8}]
 
 只返回JSON，不要其他内容。`;
 
@@ -125,22 +154,50 @@ ${state.request.grade ? `年级：${state.request.grade}` : ''}
       // 解析实体
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        const entities = JSON.parse(jsonMatch[0]) as Array<{name: string; type: string; description: string}>;
+        const entities = JSON.parse(jsonMatch[0]) as Array<{name: string; type: string; description: string; difficulty?: string; importance?: number}>;
         
+        // 有效的节点类型及常见别名映射
+        const validTypes = new Set(['Subject', 'Chapter', 'KnowledgePoint', 'Skill', 'Concept', 'Principle', 'Formula', 'Example']);
+        const typeAliasMap: Record<string, string> = {
+          '学科': 'Subject', 'subject': 'Subject',
+          '章节': 'Chapter', 'chapter': 'Chapter', '单元': 'Chapter', '模块': 'Chapter',
+          '知识点': 'KnowledgePoint', 'knowledgepoint': 'KnowledgePoint', 'knowledge_point': 'KnowledgePoint', 'knowledge': 'KnowledgePoint',
+          '技能': 'Skill', 'skill': 'Skill', '能力': 'Skill',
+          '概念': 'Concept', 'concept': 'Concept', '定义': 'Concept',
+          '原理': 'Principle', 'principle': 'Principle', '定理': 'Principle', '定律': 'Principle', '法则': 'Principle',
+          '公式': 'Formula', 'formula': 'Formula', '方程': 'Formula',
+          '示例': 'Example', 'example': 'Example', '例题': 'Example', '案例': 'Example',
+        };
+        function normalizeType(raw: string | undefined): string {
+          if (!raw) return 'KnowledgePoint';
+          if (validTypes.has(raw)) return raw;
+          const mapped = typeAliasMap[raw.toLowerCase()] || typeAliasMap[raw];
+          return mapped || 'KnowledgePoint';
+        }
+
         for (const entity of entities) {
           const id = `${state.request.documentId}-${entity.name.replace(/\s+/g, '-')}`;
           
           if (!entityMap.has(entity.name)) {
+            // 校验 difficulty
+            const validDifficulties = ['easy', 'medium', 'hard'];
+            const difficulty = validDifficulties.includes(entity.difficulty || '') ? entity.difficulty! : 'medium';
+            // 校验 importance
+            const importance = typeof entity.importance === 'number' && entity.importance >= 0 && entity.importance <= 1
+              ? entity.importance : 0.5;
+
             const extractedEntity: ExtractedEntity = {
               id,
               name: entity.name,
-              type: entity.type || 'KnowledgePoint',
+              type: normalizeType(entity.type),
               description: entity.description || '',
               properties: {
                 documentId: state.request.documentId,
                 userId: state.request.userId,
                 subject: state.request.subject,
                 grade: state.request.grade,
+                difficulty,
+                importance,
               },
             };
             entityMap.set(entity.name, extractedEntity);
@@ -254,10 +311,11 @@ async function insertToNeo4jNode(state: BuildGraphState): Promise<Partial<BuildG
         await neo4jTool.createKnowledgePoint({
           id: entity.id,
           name: entity.name,
+          type: entity.type || 'KnowledgePoint',
           description: entity.description,
-          difficulty: 'medium',
+          difficulty: (entity.properties.difficulty as string) || 'medium',
           grade: state.request.grade || '',
-          importance: 0.5,
+          importance: (entity.properties.importance as number) ?? 0.5,
           content: entity.description,
           examples: [],
           ...entity.properties,

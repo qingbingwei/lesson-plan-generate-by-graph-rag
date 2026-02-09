@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useLessonStore } from '@/stores/lesson';
+import { useDebounceFn } from '@/composables';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -16,6 +17,11 @@ const lessonStore = useLessonStore();
 const lessons = computed(() => lessonStore.lessons);
 const loading = computed(() => lessonStore.loading);
 const filters = computed(() => lessonStore.filters);
+
+// 搜索防抖
+const debouncedSearch = useDebounceFn(() => {
+  lessonStore.fetchLessons();
+}, 400);
 
 // 收藏功能
 const favorites = ref<string[]>([]);
@@ -74,6 +80,14 @@ function handleSearch() {
   lessonStore.fetchLessons();
 }
 
+// 搜索关键词高亮
+function highlightText(text: string): string {
+  const keyword = filters.value.keyword?.trim();
+  if (!keyword || !text) return text;
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
+}
+
 function handleFilterChange() {
   lessonStore.fetchLessons();
 }
@@ -93,8 +107,8 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">我的教案</h1>
-        <p class="mt-1 text-sm text-gray-500">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">我的教案</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
           管理和编辑您创建的所有教案
         </p>
       </div>
@@ -117,6 +131,7 @@ onMounted(() => {
                 type="text"
                 class="input pl-10"
                 placeholder="搜索教案..."
+                @input="debouncedSearch"
                 @keyup.enter="handleSearch"
               />
             </div>
@@ -171,8 +186,8 @@ onMounted(() => {
 
       <div v-else-if="lessons.length === 0" class="p-8 text-center">
         <DocumentTextIcon class="mx-auto h-12 w-12 text-gray-400" />
-        <h3 class="mt-2 text-sm font-medium text-gray-900">暂无教案</h3>
-        <p class="mt-1 text-sm text-gray-500">开始生成您的第一个教案吧</p>
+        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">暂无教案</h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">开始生成您的第一个教案吧</p>
         <div class="mt-6">
           <RouterLink to="/generate" class="btn-primary inline-flex items-center gap-2">
             <PlusIcon class="h-5 w-5" />
@@ -181,17 +196,16 @@ onMounted(() => {
         </div>
       </div>
 
-      <ul v-else class="divide-y divide-gray-200">
+      <ul v-else class="divide-y divide-gray-200 dark:divide-gray-700">
         <li
           v-for="lesson in lessons"
           :key="lesson.id"
-          class="p-4 hover:bg-gray-50 transition-colors"
+          class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
         >
           <RouterLink :to="`/lessons/${lesson.id}`" class="block">
             <div class="flex items-start justify-between gap-4">
               <div class="flex-1 min-w-0">
-                <h3 class="text-base font-medium text-gray-900 truncate">
-                  {{ lesson.title }}
+                <h3 class="text-base font-medium text-gray-900 dark:text-gray-100 truncate" v-html="highlightText(lesson.title)">
                 </h3>
                 <div class="mt-2 flex flex-wrap items-center gap-2">
                   <span class="badge-secondary">{{ lesson.subject }}</span>
@@ -234,7 +248,7 @@ onMounted(() => {
       <!-- Pagination -->
       <div v-if="lessonStore.totalPages > 1" class="card-footer">
         <div class="flex items-center justify-between">
-          <p class="text-sm text-gray-700">
+          <p class="text-sm text-gray-700 dark:text-gray-300">
             共 <span class="font-medium">{{ lessonStore.total }}</span> 条记录
           </p>
           <nav class="flex gap-1">
@@ -246,7 +260,7 @@ onMounted(() => {
                 'px-3 py-1 text-sm rounded',
                 page === lessonStore.page
                   ? 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
               ]"
               @click="handlePageChange(page)"
             >

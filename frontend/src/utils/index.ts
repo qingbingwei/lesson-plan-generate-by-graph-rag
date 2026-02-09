@@ -168,32 +168,5 @@ export function downloadFile(content: string, filename: string, type = 'text/pla
   URL.revokeObjectURL(url);
 }
 
-/**
- * 本地存储封装
- */
-export const storage = {
-  get<T>(key: string, defaultValue?: T): T | null {
-    try {
-      const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue ?? null;
-    } catch {
-      return defaultValue ?? null;
-    }
-  },
-  
-  set<T>(key: string, value: T): void {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      console.error('Failed to save to localStorage');
-    }
-  },
-  
-  remove(key: string): void {
-    localStorage.removeItem(key);
-  },
-  
-  clear(): void {
-    localStorage.clear();
-  },
-};
+// localStorage 统一使用 @vueuse/core 的 useStorage 或 pinia-plugin-persistedstate，
+// 不再在此维护自定义封装。

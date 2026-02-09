@@ -296,7 +296,7 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, user
 		"userId":  userId,
 		"subject": subject,
 		"grade":   grade,
-		"limit":   limit,
+		"limit":   int64(limit),
 	}
 
 	cypher := `
@@ -358,12 +358,34 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, user
 				nodeGrade = g
 			}
 
+			nodeType := "KnowledgePoint"
+			if t, ok := props["type"].(string); ok && t != "" {
+				nodeType = t
+			}
+
+			nodeDifficulty := "medium"
+			if d, ok := props["difficulty"].(string); ok && d != "" {
+				nodeDifficulty = d
+			}
+
+			nodeImportance := 0.5
+			if imp, ok := props["importance"].(float64); ok {
+				nodeImportance = imp
+			}
+
+			nodeSubject := subject
+			if s, ok := props["subject"].(string); ok && s != "" {
+				nodeSubject = s
+			}
+
 			graph.Nodes = append(graph.Nodes, model.KnowledgeNode{
-				ID:      nodeID,
-				Label:   nodeName,
-				Type:    "KnowledgePoint",
-				Subject: subject,
-				Grade:   nodeGrade,
+				ID:         nodeID,
+				Label:      nodeName,
+				Type:       nodeType,
+				Subject:    nodeSubject,
+				Grade:      nodeGrade,
+				Difficulty: nodeDifficulty,
+				Importance: nodeImportance,
 			})
 
 			relations, _ := records.Record().Get("relations")
@@ -397,6 +419,15 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, user
 				}
 			}
 		}
+
+		// 过滤掉引用不存在节点的边（LIMIT 可能导致部分节点被裁剪）
+		filteredEdges := make([]model.KnowledgeEdge, 0, len(graph.Edges))
+		for _, edge := range graph.Edges {
+			if nodeMap[edge.Source] && nodeMap[edge.Target] {
+				filteredEdges = append(filteredEdges, edge)
+			}
+		}
+		graph.Edges = filteredEdges
 
 		return graph, nil
 	})

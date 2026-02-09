@@ -79,9 +79,16 @@
             </div>
           </div>
           <button class="btn-upload" @click="uploadDocument" :disabled="uploading">
-            <span v-if="uploading">上传中...</span>
+            <span v-if="uploading">上传中... {{ uploadProgress }}%</span>
             <span v-else>开始上传</span>
           </button>
+          <!-- 上传进度条 -->
+          <div v-if="uploading" class="upload-progress">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+            <span class="progress-text">{{ uploadProgress }}%</span>
+          </div>
         </div>
       </div>
     </div>
@@ -158,6 +165,7 @@ interface KnowledgeDocument {
 const documents = ref<KnowledgeDocument[]>([]);
 const loading = ref(false);
 const uploading = ref(false);
+const uploadProgress = ref(0);
 const isDragOver = ref(false);
 const selectedFile = ref<File | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
@@ -236,6 +244,7 @@ const uploadDocument = async () => {
   if (!selectedFile.value) return;
   
   uploading.value = true;
+  uploadProgress.value = 0;
   try {
     const formData = new FormData();
     formData.append('file', selectedFile.value);
@@ -249,7 +258,9 @@ const uploadDocument = async () => {
       formData.append('grade', uploadForm.value.grade);
     }
     
-    await knowledgeApi.uploadDocument(formData);
+    await knowledgeApi.uploadDocument(formData, (percent) => {
+      uploadProgress.value = percent;
+    });
     
     // 重置表单
     removeFile();
@@ -723,5 +734,36 @@ onMounted(() => {
     width: 100%;
     margin-top: 0.5rem;
   }
+}
+
+/* 上传进度条 */
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #3b82f6;
+  min-width: 36px;
+  text-align: right;
 }
 </style>

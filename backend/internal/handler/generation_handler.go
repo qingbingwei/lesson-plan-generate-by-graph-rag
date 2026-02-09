@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"lesson-plan/backend/internal/middleware"
 	"lesson-plan/backend/internal/model"
@@ -130,6 +131,9 @@ func (h *GenerationHandler) GetKnowledgeGraph(c *gin.Context) {
 	subject := c.Query("subject")
 	grade := c.Query("grade")
 	limit := 50
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 && l <= 500 {
+		limit = l
+	}
 
 	// 获取当前用户ID，只展示用户自己的知识图谱
 	userIdStr, _ := middleware.GetCurrentUserID(c)

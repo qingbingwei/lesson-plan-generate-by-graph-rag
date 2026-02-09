@@ -17,6 +17,14 @@ import { HeartIcon as HeartSolidIcon } from '@heroicons/vue/24/solid';
 const authStore = useAuthStore();
 const lessonStore = useLessonStore();
 
+// 新手引导
+const showOnboarding = ref(false);
+
+function dismissOnboarding() {
+  showOnboarding.value = false;
+  localStorage.setItem('onboarding_dismissed', 'true');
+}
+
 // 收藏功能
 const favorites = ref<string[]>([]);
 
@@ -110,6 +118,11 @@ const quickActions = [
 ];
 
 onMounted(async () => {
+  // 新手引导检测
+  if (!localStorage.getItem('onboarding_dismissed')) {
+    showOnboarding.value = true;
+  }
+  
   // 加载收藏列表
   loadFavorites();
   
@@ -132,10 +145,10 @@ onMounted(async () => {
     <!-- Welcome section -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
           欢迎回来，{{ authStore.userName }}！
         </h1>
-        <p class="mt-1 text-sm text-gray-500">
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
           今天想要生成什么教案呢？
         </p>
       </div>
@@ -144,6 +157,40 @@ onMounted(async () => {
         生成新教案
       </RouterLink>
     </div>
+
+    <!-- 新手引导 -->
+    <transition name="slide-up">
+      <div v-if="showOnboarding" class="card bg-gradient-to-r from-primary-50 to-blue-50 border-primary-200">
+        <div class="card-body">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <div class="p-2 bg-primary-100 rounded-lg flex-shrink-0">
+                <SparklesIcon class="h-6 w-6 text-primary-600" />
+              </div>
+              <div>
+                <h3 class="font-medium text-primary-900">快速上手指南</h3>
+                <div class="mt-2 text-sm text-primary-700 space-y-1">
+                  <p><strong>1.</strong> 前往「知识库管理」上传教学文档 (.txt/.md)，系统将自动构建知识图谱</p>
+                  <p><strong>2.</strong> 在「生成教案」页选择学科、年级和课题，一键 AI 生成完整教案</p>
+                  <p><strong>3.</strong> 在「知识图谱」中探索知识点关系，支持缩放、高亮、筛选等交互</p>
+                  <p><strong>4.</strong> 生成的教案可保存、编辑，并导出为 Markdown / PDF / Word 格式</p>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="btn-icon flex-shrink-0 text-primary-400 hover:text-primary-600"
+              @click="dismissOnboarding"
+              title="关闭引导"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- Stats -->
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -157,8 +204,8 @@ onMounted(async () => {
             <component :is="stat.icon" class="h-6 w-6 text-white" />
           </div>
           <div>
-            <p class="text-2xl font-semibold text-gray-900">{{ stat.value }}</p>
-            <p class="text-sm text-gray-500">{{ stat.name }}</p>
+            <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ stat.value }}</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ stat.name }}</p>
           </div>
         </div>
       </div>
@@ -166,7 +213,7 @@ onMounted(async () => {
 
     <!-- Quick actions -->
     <div>
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">快捷操作</h2>
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">快捷操作</h2>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <RouterLink
           v-for="action in quickActions"
@@ -179,10 +226,10 @@ onMounted(async () => {
               <component :is="action.icon" class="h-6 w-6 text-white" />
             </div>
             <div>
-              <h3 class="font-medium text-gray-900 group-hover:text-primary-600 transition-colors">
+              <h3 class="font-medium text-gray-900 dark:text-gray-100 group-hover:text-primary-600 transition-colors">
                 {{ action.name }}
               </h3>
-              <p class="mt-1 text-sm text-gray-500">{{ action.description }}</p>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ action.description }}</p>
             </div>
           </div>
         </RouterLink>
@@ -192,7 +239,7 @@ onMounted(async () => {
     <!-- Recent lessons -->
     <div>
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">最近教案</h2>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">最近教案</h2>
         <RouterLink to="/lessons" class="text-sm font-medium text-primary-600 hover:text-primary-500">
           查看全部
         </RouterLink>
@@ -213,16 +260,16 @@ onMounted(async () => {
           </RouterLink>
         </div>
         
-        <ul v-else class="divide-y divide-gray-200">
+        <ul v-else class="divide-y divide-gray-200 dark:divide-gray-700">
           <li
             v-for="lesson in lessonStore.lessons"
             :key="lesson.id"
-            class="p-4 hover:bg-gray-50 transition-colors"
+            class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <RouterLink :to="`/lessons/${lesson.id}`" class="block">
               <div class="flex items-center justify-between">
                 <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium text-gray-900 truncate">
+                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                     {{ lesson.title }}
                   </p>
                   <div class="mt-1 flex items-center gap-2">

@@ -1,4 +1,5 @@
 import logger from '../utils/logger';
+import { normalizeGrade } from '../utils/gradeNormalizer';
 import type { WorkflowState, GenerateLessonRequest } from '../types';
 
 /**
@@ -103,57 +104,6 @@ function normalizeInput(input: GenerateLessonRequest): GenerateLessonRequest {
     requirements: input.requirements?.trim(),
     context: input.context,
   };
-}
-
-/**
- * 规范化年级
- */
-function normalizeGrade(grade: string): string {
-  // 处理常见的年级表示方式
-  const gradeMap: Record<string, string> = {
-    '一年级': '一年级',
-    '二年级': '二年级',
-    '三年级': '三年级',
-    '四年级': '四年级',
-    '五年级': '五年级',
-    '六年级': '六年级',
-    '七年级': '七年级',
-    '八年级': '八年级',
-    '九年级': '九年级',
-    '初一': '七年级',
-    '初二': '八年级',
-    '初三': '九年级',
-    '高一': '高一',
-    '高二': '高二',
-    '高三': '高三',
-    '1': '一年级',
-    '2': '二年级',
-    '3': '三年级',
-    '4': '四年级',
-    '5': '五年级',
-    '6': '六年级',
-    '7': '七年级',
-    '8': '八年级',
-    '9': '九年级',
-    '10': '高一',
-    '11': '高二',
-    '12': '高三',
-    'grade 1': '一年级',
-    'grade 2': '二年级',
-    'grade 3': '三年级',
-    'grade 4': '四年级',
-    'grade 5': '五年级',
-    'grade 6': '六年级',
-    'grade 7': '七年级',
-    'grade 8': '八年级',
-    'grade 9': '九年级',
-    'grade 10': '高一',
-    'grade 11': '高二',
-    'grade 12': '高三',
-  };
-
-  const normalized = gradeMap[grade.toLowerCase()];
-  return normalized || grade;
 }
 
 export default inputAnalysisNode;

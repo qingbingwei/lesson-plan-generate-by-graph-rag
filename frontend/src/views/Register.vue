@@ -58,7 +58,7 @@ async function handleSubmit() {
           <!-- Logo -->
           <div class="text-center mb-8">
             <h1 class="text-3xl font-bold text-gradient">智能教案生成系统</h1>
-            <p class="mt-2 text-sm text-gray-600">创建新账户</p>
+            <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">创建新账户</p>
           </div>
 
           <!-- Error message -->
@@ -157,7 +157,7 @@ async function handleSubmit() {
 
           <!-- Login link -->
           <div class="mt-6 text-center">
-            <span class="text-sm text-gray-600">已有账户？</span>
+            <span class="text-sm text-gray-600 dark:text-gray-400">已有账户？</span>
             <RouterLink to="/login" class="text-sm font-medium text-primary-600 hover:text-primary-500 ml-1">
               立即登录
             </RouterLink>

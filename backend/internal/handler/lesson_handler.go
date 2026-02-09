@@ -434,6 +434,90 @@ func (h *LessonHandler) Search(c *gin.Context) {
 	Paginated(c, lessons, total, page, pageSize)
 }
 
+// ListVersions 获取教案版本历史
+func (h *LessonHandler) ListVersions(c *gin.Context) {
+	userID, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "未认证", nil)
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		Error(c, http.StatusBadRequest, "无效的ID", nil)
+		return
+	}
+
+	userUUID, _ := uuid.Parse(userID)
+	versions, err := h.lessonService.ListVersions(c.Request.Context(), id, userUUID)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "获取版本列表失败", err.Error())
+		return
+	}
+
+	Success(c, versions)
+}
+
+// GetVersion 获取指定版本
+func (h *LessonHandler) GetVersion(c *gin.Context) {
+	userID, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "未认证", nil)
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		Error(c, http.StatusBadRequest, "无效的ID", nil)
+		return
+	}
+
+	var version int
+	if _, err := fmt.Sscanf(c.Param("version"), "%d", &version); err != nil {
+		Error(c, http.StatusBadRequest, "无效的版本号", nil)
+		return
+	}
+
+	userUUID, _ := uuid.Parse(userID)
+	v, err := h.lessonService.GetVersion(c.Request.Context(), id, version, userUUID)
+	if err != nil {
+		Error(c, http.StatusNotFound, "版本不存在", err.Error())
+		return
+	}
+
+	Success(c, v)
+}
+
+// RollbackToVersion 回滚到指定版本
+func (h *LessonHandler) RollbackToVersion(c *gin.Context) {
+	userID, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "未认证", nil)
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		Error(c, http.StatusBadRequest, "无效的ID", nil)
+		return
+	}
+
+	var version int
+	if _, err := fmt.Sscanf(c.Param("version"), "%d", &version); err != nil {
+		Error(c, http.StatusBadRequest, "无效的版本号", nil)
+		return
+	}
+
+	userUUID, _ := uuid.Parse(userID)
+	lesson, err := h.lessonService.RollbackToVersion(c.Request.Context(), id, version, userUUID)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "回滚失败", err.Error())
+		return
+	}
+
+	Success(c, lesson)
+}
+
 // Export 导出教案
 func (h *LessonHandler) Export(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))

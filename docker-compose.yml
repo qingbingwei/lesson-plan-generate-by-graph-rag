@@ -107,7 +107,7 @@ services:
       
       # 智能体服务配置
       AGENT_SERVICE_URL: http://agent:3001
-      AGENT_TIMEOUT: 120s
+      AGENT_TIMEOUT: 120
       
       # 日志配置
       LOG_LEVEL: ${LOG_LEVEL:-info}

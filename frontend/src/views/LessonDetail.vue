@@ -2,6 +2,8 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useLessonStore } from '@/stores/lesson';
+import { getLessonVersions, rollbackToVersion } from '@/api/lesson';
+import type { LessonVersion } from '@/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue';
 import {
   PencilIcon,
@@ -23,6 +25,42 @@ const lesson = computed(() => lessonStore.currentLesson);
 const loading = computed(() => lessonStore.loading);
 const publishing = ref(false);
 const publishError = ref('');
+
+// 版本历史
+const showVersionPanel = ref(false);
+const versions = ref<LessonVersion[]>([]);
+const versionsLoading = ref(false);
+
+async function loadVersions() {
+  if (versionsLoading.value) return;
+  versionsLoading.value = true;
+  try {
+    versions.value = await getLessonVersions(lessonId.value);
+  } catch {
+    versions.value = [];
+  } finally {
+    versionsLoading.value = false;
+  }
+}
+
+function toggleVersionPanel() {
+  showVersionPanel.value = !showVersionPanel.value;
+  if (showVersionPanel.value && versions.value.length === 0) {
+    loadVersions();
+  }
+}
+
+async function handleRollback(version: number) {
+  if (!confirm(`确定要回滚到版本 ${version} 吗？当前版本将被保存为历史记录。`)) return;
+  try {
+    await rollbackToVersion(lessonId.value as any, version);
+    await lessonStore.fetchLesson(lessonId.value);
+    await loadVersions();
+    alert('回滚成功');
+  } catch {
+    alert('回滚失败');
+  }
+}
 
 // 收藏功能
 const favorites = ref<string[]>([]);
@@ -267,6 +305,14 @@ function parseJsonText(value: any): string {
           <button
             type="button"
             class="btn-outline btn-sm inline-flex items-center gap-1"
+            @click="toggleVersionPanel"
+          >
+            <ClockIcon class="h-4 w-4" />
+            版本历史
+          </button>
+          <button
+            type="button"
+            class="btn-outline btn-sm inline-flex items-center gap-1"
           >
             <ShareIcon class="h-4 w-4" />
             分享
@@ -281,6 +327,41 @@ function parseJsonText(value: any): string {
           </button>
         </div>
       </div>
+
+      <!-- 版本历史面板 -->
+      <transition name="slide-down">
+        <div v-if="showVersionPanel" class="card">
+          <div class="card-header">
+            <h3 class="font-medium">版本历史</h3>
+          </div>
+          <div class="card-body">
+            <div v-if="versionsLoading" class="text-center py-4">
+              <div class="loading mx-auto" />
+            </div>
+            <div v-else-if="versions.length === 0" class="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+              暂无版本记录（编辑后将自动保存版本）
+            </div>
+            <ul v-else class="divide-y divide-gray-100 dark:divide-gray-700">
+              <li v-for="v in versions" :key="v.id" class="flex items-center justify-between py-3">
+                <div>
+                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">版本 {{ v.version }}</span>
+                  <span v-if="v.changeLog" class="text-xs text-gray-500 dark:text-gray-400 ml-2">{{ v.changeLog }}</span>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                    {{ new Date(v.createdAt).toLocaleString('zh-CN') }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="btn-outline btn-sm text-xs"
+                  @click="handleRollback(v.version)"
+                >
+                  回滚
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </transition>
 
       <!-- Content -->
       <div class="space-y-6">

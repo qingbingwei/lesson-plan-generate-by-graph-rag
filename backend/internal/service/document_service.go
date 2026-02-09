@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,13 +17,13 @@ import (
 
 // DocumentService 文档服务
 type DocumentService struct {
-	documentRepo *repository.DocumentRepository
+	documentRepo repository.DocumentRepository
 	agentConfig  *config.AgentConfig
 	httpClient   *http.Client
 }
 
 // NewDocumentService 创建文档服务
-func NewDocumentService(documentRepo *repository.DocumentRepository, agentConfig *config.AgentConfig) *DocumentService {
+func NewDocumentService(documentRepo repository.DocumentRepository, agentConfig *config.AgentConfig) *DocumentService {
 	return &DocumentService{
 		documentRepo: documentRepo,
 		agentConfig:  agentConfig,
@@ -39,14 +40,24 @@ func (s *DocumentService) CreateDocument(doc *model.KnowledgeDocument) error {
 		return err
 	}
 
-	// 异步处理文档
-	go s.processDocument(doc)
+	// 异步处理文档（带 recover 和超时保护）
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(fmt.Sprintf("panic in processDocument for doc %s: %v", doc.ID, r))
+				s.documentRepo.UpdateDocumentStatus(doc.ID, model.DocStatusFailed, 0, 0, "内部错误: 处理过程异常")
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		s.processDocument(ctx, doc)
+	}()
 
 	return nil
 }
 
 // processDocument 处理文档，调用Agent构建知识图谱
-func (s *DocumentService) processDocument(doc *model.KnowledgeDocument) {
+func (s *DocumentService) processDocument(ctx context.Context, doc *model.KnowledgeDocument) {
 	// 更新状态为处理中
 	if err := s.documentRepo.UpdateDocumentStatus(doc.ID, model.DocStatusProcessing, 0, 0, ""); err != nil {
 		logger.Error("Failed to update document status: " + err.Error())
@@ -69,9 +80,9 @@ func (s *DocumentService) processDocument(doc *model.KnowledgeDocument) {
 		return
 	}
 
-	// 调用Agent API
+	// 调用Agent API（带 context 超时控制）
 	agentURL := fmt.Sprintf("%s/api/build-graph", s.agentConfig.URL)
-	req, err := http.NewRequest("POST", agentURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", agentURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		s.documentRepo.UpdateDocumentStatus(doc.ID, model.DocStatusFailed, 0, 0, "请求创建失败")
 		return
@@ -139,15 +150,24 @@ func (s *DocumentService) DeleteDocument(id string, userID string) error {
 		return fmt.Errorf("document not found")
 	}
 
-	// 调用Agent删除Neo4j中的节点
-	go s.deleteDocumentNodes(id)
+	// 调用Agent删除Neo4j中的节点（带 recover 和超时保护）
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(fmt.Sprintf("panic in deleteDocumentNodes for doc %s: %v", id, r))
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		s.deleteDocumentNodes(ctx, id)
+	}()
 
 	// 删除数据库记录
 	return s.documentRepo.DeleteDocument(id, userID)
 }
 
 // deleteDocumentNodes 删除Neo4j中的文档节点
-func (s *DocumentService) deleteDocumentNodes(documentID string) {
+func (s *DocumentService) deleteDocumentNodes(ctx context.Context, documentID string) {
 	reqBody := map[string]string{
 		"documentId": documentID,
 	}
@@ -158,7 +178,7 @@ func (s *DocumentService) deleteDocumentNodes(documentID string) {
 	}
 
 	agentURL := fmt.Sprintf("%s/api/delete-document-nodes", s.agentConfig.URL)
-	req, err := http.NewRequest("POST", agentURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", agentURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return
 	}

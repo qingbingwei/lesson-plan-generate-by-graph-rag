@@ -25,7 +25,7 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "\n${YELLOW}[1/4] 检查 Docker 容器...${NC}"
 if ! docker ps | grep -q "lesson-plan-postgres"; then
     echo -e "${YELLOW}启动 Docker 容器...${NC}"
-    cd "$PROJECT_DIR" && docker-compose up -d
+    cd "$PROJECT_DIR" && docker-compose up -d postgres neo4j redis
     sleep 5
 else
     echo -e "${GREEN}✓ Docker 容器已在运行${NC}"

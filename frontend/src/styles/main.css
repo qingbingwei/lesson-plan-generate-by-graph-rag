@@ -29,6 +29,11 @@
   h4 {
     @apply text-lg font-medium;
   }
+
+  /* 搜索高亮 */
+  mark {
+    @apply bg-yellow-200 text-inherit rounded-sm px-0.5;
+  }
 }
 
 /* 组件样式 */
@@ -180,6 +185,59 @@
   }
 }
 
+/* ===== 暗色模式覆盖 ===== */
+.dark body {
+  @apply bg-gray-900 text-gray-100;
+}
+
+.dark mark {
+  @apply bg-yellow-700/60;
+}
+
+.dark .btn-secondary {
+  @apply bg-gray-700 text-gray-200 hover:bg-gray-600;
+}
+
+.dark .btn-outline {
+  @apply border-gray-600 text-gray-300 hover:bg-gray-800;
+}
+
+.dark .btn-ghost {
+  @apply text-gray-400 hover:bg-gray-800;
+}
+
+.dark .btn-icon {
+  @apply text-gray-400 hover:bg-gray-700 hover:text-gray-200;
+}
+
+.dark .input {
+  @apply bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-500;
+}
+
+.dark .label {
+  @apply text-gray-300;
+}
+
+.dark .card {
+  @apply bg-gray-800 border-gray-700;
+}
+
+.dark .card-header {
+  @apply border-gray-700;
+}
+
+.dark .card-footer {
+  @apply border-gray-700 bg-gray-900;
+}
+
+.dark .badge-secondary {
+  @apply bg-gray-700 text-gray-200;
+}
+
+.dark .skeleton {
+  @apply bg-gray-700;
+}
+
 /* 工具类 */
 @layer utilities {
   /* 文本截断 */
@@ -228,6 +286,18 @@
     background-color: #94a3b8;
   }
 
+  .dark .scrollbar-thin {
+    scrollbar-color: #4b5563 transparent;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #4b5563;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #6b7280;
+  }
+
   /* 隐藏滚动条 */
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -243,6 +313,10 @@
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     background-color: rgba(255, 255, 255, 0.8);
+  }
+
+  .dark .glass {
+    background-color: rgba(31, 41, 55, 0.8);
   }
 
   /* 渐变文字 */
@@ -293,4 +367,37 @@
 .scale-leave-to {
   opacity: 0;
   transform: scale(0.95);
+}
+
+/* 移动端适配 */
+@media (max-width: 640px) {
+  .card-body {
+    @apply px-4 py-3;
+  }
+
+  .card-header {
+    @apply px-4 py-3;
+  }
+
+  h1 {
+    @apply text-2xl;
+  }
+
+  h2 {
+    @apply text-xl;
+  }
+}
+
+/* 安全区域适配 (iPhone 刘海屏等) */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* 触控优化 — 增大按钮点击区域 */
+@media (pointer: coarse) {
+  .btn-icon {
+    @apply min-w-[44px] min-h-[44px];
+  }
 }

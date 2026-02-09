@@ -1,6 +1,7 @@
 import { generateSections } from '../skills';
 import logger from '../utils/logger';
-import type { WorkflowState, TokenUsage } from '../types';
+import { mergeUsage } from '../utils/tokenUsage';
+import type { WorkflowState } from '../types';
 
 /**
  * 内容设计节点
@@ -62,17 +63,6 @@ export async function contentDesignNode(state: WorkflowState): Promise<Partial<W
       error: error instanceof Error ? error.message : 'Content design failed',
     };
   }
-}
-
-/**
- * 合并 token 使用统计
- */
-function mergeUsage(existing?: TokenUsage, newUsage?: TokenUsage): TokenUsage {
-  return {
-    promptTokens: (existing?.promptTokens || 0) + (newUsage?.promptTokens || 0),
-    completionTokens: (existing?.completionTokens || 0) + (newUsage?.completionTokens || 0),
-    totalTokens: (existing?.totalTokens || 0) + (newUsage?.totalTokens || 0),
-  };
 }
 
 export default contentDesignNode;

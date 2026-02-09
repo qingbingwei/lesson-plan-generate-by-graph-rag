@@ -87,6 +87,11 @@ const WorkflowStateAnnotation = Annotation.Root({
  * 创建教案生成工作流
  */
 export function createLessonWorkflow() {
+  // 检查是否有错误的路由函数
+  const shouldContinue = (state: WorkflowState) => {
+    return state.error ? 'outputFormat' : undefined;
+  };
+
   // 创建状态图 - 使用 Annotation 定义的状态模式
   const workflow = new StateGraph(WorkflowStateAnnotation)
     // 添加节点
@@ -96,12 +101,20 @@ export function createLessonWorkflow() {
     .addNode('contentDesign', contentDesignNode)
     .addNode('activityDesign', activityDesignNode)
     .addNode('outputFormat', outputFormatNode)
-    // 添加边 - LangGraph 1.0+ API
+    // 添加边 - 使用条件边实现错误短路
     .addEdge(START, 'inputAnalysis')
-    .addEdge('inputAnalysis', 'knowledgeQuery')
-    .addEdge('knowledgeQuery', 'objectiveDesign')
-    .addEdge('objectiveDesign', 'contentDesign')
-    .addEdge('contentDesign', 'activityDesign')
+    .addConditionalEdges('inputAnalysis', (state) => {
+      return (state as unknown as WorkflowState).error ? 'outputFormat' : 'knowledgeQuery';
+    })
+    .addConditionalEdges('knowledgeQuery', (state) => {
+      return (state as unknown as WorkflowState).error ? 'outputFormat' : 'objectiveDesign';
+    })
+    .addConditionalEdges('objectiveDesign', (state) => {
+      return (state as unknown as WorkflowState).error ? 'outputFormat' : 'contentDesign';
+    })
+    .addConditionalEdges('contentDesign', (state) => {
+      return (state as unknown as WorkflowState).error ? 'outputFormat' : 'activityDesign';
+    })
     .addEdge('activityDesign', 'outputFormat')
     .addEdge('outputFormat', END);
 

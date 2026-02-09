@@ -1,16 +1,7 @@
-import { z } from 'zod';
-import { getDeepSeekClient } from '../clients/deepseek';
+import { getClient } from '../clients';
 import logger from '../utils/logger';
+import type { Skill } from './index';
 import type { LessonObjectives, LessonSection, GenerateLessonRequest, TokenUsage } from '../types';
-
-// Skill 定义 Schema
-const SkillSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  content: z.string(),
-});
-
-type Skill = z.infer<typeof SkillSchema>;
 
 /**
  * 评价设计 Skill 定义
@@ -44,16 +35,6 @@ export const evaluationDesignSkill: Skill = {
 - 生成教学反思框架
 `,
 };
-
-// DeepSeek 客户端（单例）
-let deepseekClient: ReturnType<typeof getDeepSeekClient> | null = null;
-
-function getClient() {
-  if (!deepseekClient) {
-    deepseekClient = getDeepSeekClient();
-  }
-  return deepseekClient;
-}
 
 /**
  * 构建系统提示词
