@@ -1,4 +1,5 @@
 import logger from '../utils/logger';
+import config from '../config';
 
 /**
  * 千问 API 客户端
@@ -10,9 +11,9 @@ class QwenClient {
   private embeddingModel: string;
 
   constructor() {
-    this.apiKey = process.env.QWEN_API_KEY || '';
-    this.embeddingUrl = process.env.QWEN_EMBEDDING_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings';
-    this.embeddingModel = process.env.QWEN_EMBEDDING_MODEL || 'text-embedding-v4';
+    this.apiKey = config.qwen.apiKey;
+    this.embeddingUrl = config.qwen.embeddingUrl;
+    this.embeddingModel = config.qwen.embeddingModel;
 
     if (!this.apiKey) {
       logger.warn('QWEN_API_KEY is not set, embedding will not work');

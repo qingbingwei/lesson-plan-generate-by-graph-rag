@@ -7,6 +7,16 @@ set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="/tmp/lesson-plan"
+ENV_FILE="$PROJECT_DIR/.env"
+
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+fi
+
+AGENT_PORT="${AGENT_PORT:-${PORT:-13001}}"
 
 # 创建日志目录
 mkdir -p "$LOG_DIR"
@@ -20,6 +30,10 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  教案生成系统 - 启动服务${NC}"
 echo -e "${GREEN}========================================${NC}"
+
+if [ -f "$PROJECT_DIR/agent/.env" ]; then
+    echo -e "${YELLOW}[WARN] 检测到 agent/.env，当前已统一使用根目录 .env，请删除 agent/.env 避免混淆${NC}"
+fi
 
 # 检查Docker容器是否运行
 echo -e "\n${YELLOW}[1/4] 检查 Docker 容器...${NC}"
@@ -54,19 +68,23 @@ fi
 # 启动Agent服务
 echo -e "\n${YELLOW}[3/4] 启动 Agent 服务 (Node.js)...${NC}"
 cd "$PROJECT_DIR/agent"
-if lsof -ti :3001 > /dev/null 2>&1; then
-    echo -e "${YELLOW}端口 3001 已被占用，正在关闭...${NC}"
-    kill $(lsof -ti :3001) 2>/dev/null || true
+if lsof -ti :$AGENT_PORT > /dev/null 2>&1; then
+    echo -e "${YELLOW}端口 $AGENT_PORT 已被占用，正在关闭...${NC}"
+    kill $(lsof -ti :$AGENT_PORT) 2>/dev/null || true
     sleep 2
 fi
-nohup npm run dev > "$LOG_DIR/agent.log" 2>&1 &
+if [ "$AGENT_PORT" != "3001" ] && lsof -ti :3001 > /dev/null 2>&1; then
+    kill $(lsof -ti :3001) 2>/dev/null || true
+    sleep 1
+fi
+AGENT_PORT="$AGENT_PORT" PORT="$AGENT_PORT" nohup npm run dev > "$LOG_DIR/agent.log" 2>&1 &
 AGENT_PID=$!
 echo "Agent PID: $AGENT_PID"
 
 # 等待Agent启动
 sleep 5
-if lsof -ti :3001 > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Agent 服务已启动 (http://localhost:3001)${NC}"
+if lsof -ti :$AGENT_PORT > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Agent 服务已启动 (http://localhost:$AGENT_PORT)${NC}"
 else
     echo -e "${RED}✗ Agent 服务启动失败，查看日志: $LOG_DIR/agent.log${NC}"
 fi
@@ -101,7 +119,7 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "\n服务地址："
 echo -e "  前端:  ${GREEN}http://localhost:${FRONTEND_PORT:-5173}${NC}"
 echo -e "  后端:  ${GREEN}http://localhost:8080${NC}"
-echo -e "  Agent: ${GREEN}http://localhost:3001${NC}"
+echo -e "  Agent: ${GREEN}http://localhost:$AGENT_PORT${NC}"
 echo -e "\n日志目录: $LOG_DIR"
 echo -e "  - backend.log"
 echo -e "  - agent.log"

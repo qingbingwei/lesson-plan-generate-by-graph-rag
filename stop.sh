@@ -4,6 +4,16 @@
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="/tmp/lesson-plan"
+ENV_FILE="$PROJECT_DIR/.env"
+
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+fi
+
+AGENT_PORT="${AGENT_PORT:-${PORT:-13001}}"
 
 # 颜色输出
 GREEN='\033[0;32m'
@@ -21,11 +31,15 @@ pkill -f "vite" 2>/dev/null && echo -e "${GREEN}✓ 前端服务已关闭${NC}" 
 
 # 关闭Agent服务
 echo -e "\n${YELLOW}[2/3] 关闭 Agent 服务...${NC}"
-if lsof -ti :3001 > /dev/null 2>&1; then
-    kill $(lsof -ti :3001) 2>/dev/null
+if lsof -ti :$AGENT_PORT > /dev/null 2>&1; then
+    kill $(lsof -ti :$AGENT_PORT) 2>/dev/null
     echo -e "${GREEN}✓ Agent 服务已关闭${NC}"
 else
     echo -e "${YELLOW}Agent 服务未运行${NC}"
+fi
+
+if [ "$AGENT_PORT" != "3001" ] && lsof -ti :3001 > /dev/null 2>&1; then
+    kill $(lsof -ti :3001) 2>/dev/null
 fi
 
 # 关闭后端服务
@@ -56,8 +70,8 @@ if lsof -ti :8080 > /dev/null 2>&1; then
     STILL_RUNNING=1
 fi
 
-if lsof -ti :3001 > /dev/null 2>&1; then
-    echo -e "${RED}✗ Agent 服务仍在运行 (端口 3001)${NC}"
+if lsof -ti :$AGENT_PORT > /dev/null 2>&1; then
+    echo -e "${RED}✗ Agent 服务仍在运行 (端口 $AGENT_PORT)${NC}"
     STILL_RUNNING=1
 fi
 

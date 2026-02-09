@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
 import * as d3 from 'd3';
 import api from '@/api/index';
 import type { KnowledgeNode, KnowledgeLink, KnowledgePoint, KnowledgeNodeType, ApiResponse } from '@/types';
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import { useDebounceFn } from '@/composables';
+import { useDark } from '@vueuse/core';
 
 // 移动端检测
 const windowWidth = ref(window.innerWidth);
@@ -39,6 +40,12 @@ const svgRef = ref<SVGSVGElement | null>(null);
 const loading = ref(false);
 const selectedNode = ref<KnowledgePoint | null>(null);
 const highlightedNodeId = ref<string | null>(null);
+const isDark = useDark({
+  selector: 'html',
+  attribute: 'class',
+  valueDark: 'dark',
+  valueLight: '',
+});
 
 // 保存 zoom 实例和 svg 引用供缩放按钮使用
 let currentZoom: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null;
@@ -178,6 +185,32 @@ function zoomReset() {
   }
 }
 
+function getGraphTheme() {
+  if (isDark.value) {
+    return {
+      canvasBackground: '#0f172a',
+      tooltipBackground: 'rgba(15, 23, 42, 0.95)',
+      tooltipText: '#e2e8f0',
+      tooltipMeta: '#94a3b8',
+      linkColor: '#475569',
+      linkHighlight: '#60a5fa',
+      nodeStroke: '#0f172a',
+      nodeHighlight: '#fbbf24',
+    };
+  }
+
+  return {
+    canvasBackground: '#f8fafc',
+    tooltipBackground: 'rgba(15, 23, 42, 0.9)',
+    tooltipText: '#ffffff',
+    tooltipMeta: '#94a3b8',
+    linkColor: '#cbd5e1',
+    linkHighlight: '#3b82f6',
+    nodeStroke: '#ffffff',
+    nodeHighlight: '#fbbf24',
+  };
+}
+
 // 渲染图谱
 function renderGraph() {
   if (!svgRef.value || graphData.value.nodes.length === 0) return;
@@ -187,9 +220,11 @@ function renderGraph() {
 
   const width = Math.max(svgRef.value.clientWidth, 600);
   const height = Math.max(svgRef.value.clientHeight, 400);
+  const theme = getGraphTheme();
   
   svg.attr('width', width).attr('height', height);
   svg.style('overflow', 'visible');
+  svg.style('background', theme.canvasBackground);
 
   const g = svg.append('g');
 
@@ -199,8 +234,8 @@ function renderGraph() {
     .attr('class', 'graph-tooltip')
     .style('position', 'absolute')
     .style('display', 'none')
-    .style('background', 'rgba(15,23,42,0.9)')
-    .style('color', '#fff')
+    .style('background', theme.tooltipBackground)
+    .style('color', theme.tooltipText)
     .style('padding', '8px 12px')
     .style('border-radius', '6px')
     .style('font-size', '12px')
@@ -272,7 +307,7 @@ function renderGraph() {
     .selectAll('line')
     .data(links)
     .join('line')
-    .attr('stroke', '#cbd5e1')
+    .attr('stroke', theme.linkColor)
     .attr('stroke-width', 2)
     .attr('stroke-opacity', 0.6);
   
@@ -303,7 +338,7 @@ function renderGraph() {
   node.append('circle')
     .attr('r', nodeRadius)
     .attr('fill', (d) => getNodeColor(d.type))
-    .attr('stroke', '#fff')
+    .attr('stroke', theme.nodeStroke)
     .attr('stroke-width', nodeRadius > 15 ? 2 : 1);
 
   // 节点文字
@@ -321,8 +356,8 @@ function renderGraph() {
     tooltip
       .style('display', 'block')
       .html(`<div class="font-semibold">${d.name}</div>
-             <div style="color:#94a3b8;margin-top:2px">${typeName}</div>
-             ${d.properties?.subject ? `<div style="color:#94a3b8">${d.properties.subject} ${d.properties.grade || ''}</div>` : ''}`);
+             <div style="color:${theme.tooltipMeta};margin-top:2px">${typeName}</div>
+             ${d.properties?.subject ? `<div style="color:${theme.tooltipMeta}">${d.properties.subject} ${d.properties.grade || ''}</div>` : ''}`);
   })
   .on('mousemove', (event) => {
     const rect = svgRef.value!.parentElement!.getBoundingClientRect();
@@ -353,7 +388,7 @@ function renderGraph() {
         if (neighbors.has(n.id)) return 1;
         return 0.15;
       })
-      .attr('stroke', (n) => n.id === clickedId ? '#fbbf24' : '#fff')
+      .attr('stroke', (n) => n.id === clickedId ? theme.nodeHighlight : theme.nodeStroke)
       .attr('stroke-width', (n) => n.id === clickedId ? 3 : (nodeRadius > 15 ? 2 : 1));
 
     node.select('text')
@@ -373,7 +408,7 @@ function renderGraph() {
       .attr('stroke', (l) => {
         const src = typeof l.source === 'string' ? l.source : (l.source as any).id;
         const tgt = typeof l.target === 'string' ? l.target : (l.target as any).id;
-        return (src === clickedId || tgt === clickedId) ? '#3b82f6' : '#cbd5e1';
+        return (src === clickedId || tgt === clickedId) ? theme.linkHighlight : theme.linkColor;
       })
       .attr('stroke-width', (l) => {
         const src = typeof l.source === 'string' ? l.source : (l.source as any).id;
@@ -386,12 +421,12 @@ function renderGraph() {
   function resetHighlight() {
     node.select('circle')
       .attr('opacity', 1)
-      .attr('stroke', '#fff')
+      .attr('stroke', theme.nodeStroke)
       .attr('stroke-width', nodeRadius > 15 ? 2 : 1);
     node.select('text').attr('opacity', 1);
     link
       .attr('stroke-opacity', 0.6)
-      .attr('stroke', '#cbd5e1')
+      .attr('stroke', theme.linkColor)
       .attr('stroke-width', 2);
   }
 
@@ -499,6 +534,10 @@ onMounted(() => {
   window.addEventListener('resize', handleResize);
 });
 
+watch(isDark, () => {
+  renderGraph();
+});
+
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
 });
@@ -535,7 +574,7 @@ onUnmounted(() => {
             <div>
               <label class="label">关键词</label>
               <div class="relative">
-                <MagnifyingGlassIcon class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <MagnifyingGlassIcon class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <input
                   v-model="filters.topic"
                   type="text"
@@ -559,16 +598,16 @@ onUnmounted(() => {
           <div v-if="loading" class="p-4 text-center">
             <div class="loading" />
           </div>
-          <ul v-else class="divide-y divide-gray-100">
+          <ul v-else class="divide-y divide-gray-100 dark:divide-gray-700">
             <li
               v-for="point in knowledgePoints"
               :key="point.id"
-              class="p-3 hover:bg-gray-50 cursor-pointer transition-colors"
-              :class="{ 'bg-primary-50': selectedNode?.id === point.id }"
+              class="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer transition-colors"
+              :class="{ 'bg-primary-50 dark:bg-primary-900/30': selectedNode?.id === point.id }"
               @click="selectKnowledgePoint(point)"
             >
-              <h4 class="font-medium text-sm text-gray-900">{{ point.name }}</h4>
-              <p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ point.description }}</p>
+              <h4 class="font-medium text-sm text-gray-900 dark:text-gray-100">{{ point.name }}</h4>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{{ point.description }}</p>
               <div class="flex gap-2 mt-2">
                 <span class="badge-secondary text-xs">{{ point.difficulty }}</span>
                 <span class="badge-secondary text-xs">重要度: {{ point.importance }}</span>
@@ -598,7 +637,7 @@ onUnmounted(() => {
         </div>
         <div class="flex items-center gap-2 lg:gap-3">
           <!-- 图例 - 移动端隐藏文字 -->
-          <div class="hidden sm:flex gap-2 flex-wrap">
+          <div class="graph-legend hidden sm:flex gap-2 flex-wrap">
             <span class="flex items-center gap-1 text-xs">
               <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>学科
             </span>
@@ -631,7 +670,7 @@ onUnmounted(() => {
             </span>
           </div>
           <!-- 缩放控制 -->
-          <div class="flex items-center border rounded-md divide-x">
+          <div class="graph-zoom-controls flex items-center border rounded-md divide-x">
             <button type="button" class="px-2 py-1 text-sm hover:bg-gray-100" title="放大" @click="zoomIn">+</button>
             <button type="button" class="px-2 py-1 text-sm hover:bg-gray-100" title="重置" @click="zoomReset">⟳</button>
             <button type="button" class="px-2 py-1 text-sm hover:bg-gray-100" title="缩小" @click="zoomOut">−</button>
@@ -641,7 +680,7 @@ onUnmounted(() => {
       <div class="flex-1 relative min-h-0">
         <svg
           ref="svgRef"
-          class="w-full h-full absolute inset-0"
+          class="graph-canvas w-full h-full absolute inset-0"
           :class="{ 'opacity-50': loading }"
           style="min-height: 300px;"
         />
@@ -649,7 +688,7 @@ onUnmounted(() => {
           v-if="graphData.nodes.length === 0 && !loading"
           class="absolute inset-0 flex items-center justify-center"
         >
-          <div class="text-center text-gray-500">
+          <div class="graph-empty text-center text-gray-500">
             <p>暂无知识图谱数据</p>
             <p class="text-sm mt-1">请先上传文档或调整筛选条件</p>
           </div>
@@ -658,3 +697,53 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.graph-canvas {
+  background: #f8fafc;
+}
+
+:global(.dark) .graph-canvas {
+  background: #0f172a;
+}
+
+.graph-legend span {
+  color: #4b5563;
+}
+
+:global(.dark) .graph-legend span {
+  color: #d1d5db;
+}
+
+.graph-zoom-controls {
+  border-color: #e5e7eb;
+  background: rgba(255, 255, 255, 0.85);
+  color: #374151;
+}
+
+.graph-zoom-controls :deep(button) {
+  color: inherit;
+}
+
+.graph-zoom-controls :deep(button) {
+  transition: background-color 0.2s;
+}
+
+.graph-zoom-controls :deep(button:hover) {
+  background: #f3f4f6;
+}
+
+:global(.dark) .graph-zoom-controls {
+  border-color: #4b5563;
+  background: rgba(31, 41, 55, 0.85);
+  color: #e5e7eb;
+}
+
+:global(.dark) .graph-zoom-controls :deep(button:hover) {
+  background: #374151;
+}
+
+:global(.dark) .graph-empty {
+  color: #9ca3af;
+}
+</style>

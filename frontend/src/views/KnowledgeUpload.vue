@@ -766,4 +766,137 @@ onMounted(() => {
   min-width: 36px;
   text-align: right;
 }
+
+:global(.dark) .knowledge-upload {
+  color: #e5e7eb;
+}
+
+:global(.dark) .page-header h1,
+:global(.dark) .documents-section h2,
+:global(.dark) .doc-info h3,
+:global(.dark) .file-name {
+  color: #f3f4f6;
+}
+
+:global(.dark) .subtitle,
+:global(.dark) .file-size,
+:global(.dark) .loading-state,
+:global(.dark) .empty-state,
+:global(.dark) .doc-meta,
+:global(.dark) .upload-hint {
+  color: #9ca3af;
+}
+
+:global(.dark) .upload-section,
+:global(.dark) .documents-section {
+  background: #1f2937;
+  border: 1px solid #374151;
+  box-shadow: none;
+}
+
+:global(.dark) .upload-area {
+  border-color: #4b5563;
+  background: #111827;
+}
+
+:global(.dark) .upload-area:hover,
+:global(.dark) .upload-area.drag-over {
+  border-color: #60a5fa;
+  background: #1e293b;
+}
+
+:global(.dark) .upload-icon,
+:global(.dark) .btn-remove {
+  color: #9ca3af;
+}
+
+:global(.dark) .upload-text,
+:global(.dark) .form-group label {
+  color: #d1d5db;
+}
+
+:global(.dark) .upload-options {
+  border-top-color: #374151;
+}
+
+:global(.dark) .file-info {
+  background: #111827;
+}
+
+:global(.dark) .form-group input,
+:global(.dark) .form-group select {
+  background: #111827;
+  border-color: #4b5563;
+  color: #f3f4f6;
+}
+
+:global(.dark) .form-group input:focus,
+:global(.dark) .form-group select:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+:global(.dark) .spinner {
+  border-color: #374151;
+  border-top-color: #60a5fa;
+}
+
+:global(.dark) .document-card {
+  border-color: #374151;
+  background: #111827;
+}
+
+:global(.dark) .document-card:hover {
+  border-color: #4b5563;
+  box-shadow: none;
+}
+
+:global(.dark) .doc-icon {
+  background: #1e3a8a33;
+  color: #93c5fd;
+}
+
+:global(.dark) .stat {
+  color: #6ee7b7;
+  background: #064e3b;
+}
+
+:global(.dark) .status-pending {
+  background: #78350f;
+  color: #fcd34d;
+}
+
+:global(.dark) .status-processing {
+  background: #1e3a8a;
+  color: #93c5fd;
+}
+
+:global(.dark) .status-completed {
+  background: #065f46;
+  color: #6ee7b7;
+}
+
+:global(.dark) .status-failed {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+
+:global(.dark) .btn-action {
+  border-color: #4b5563;
+  color: #d1d5db;
+}
+
+:global(.dark) .btn-delete:hover {
+  color: #fca5a5;
+  border-color: #f87171;
+  background: #7f1d1d;
+}
+
+:global(.dark) .progress-bar {
+  background: #374151;
+}
+
+:global(.dark) .progress-text {
+  color: #93c5fd;
+}
 </style>

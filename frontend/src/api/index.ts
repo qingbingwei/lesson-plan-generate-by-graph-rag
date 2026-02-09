@@ -2,9 +2,33 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig, AxiosResp
 import { useAuthStore } from '@/stores/auth';
 import type { ApiResponse } from '@/types';
 
+function normalizeApiBaseUrl(rawValue?: string): string {
+  const fallback = '/api/v1';
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const value = rawValue.trim().replace(/\/+$/, '');
+  if (!value) {
+    return fallback;
+  }
+
+  if (/\/api\/v1$/i.test(value)) {
+    return value;
+  }
+
+  if (/\/api$/i.test(value)) {
+    return `${value}/v1`;
+  }
+
+  return `${value}/api/v1`;
+}
+
+const resolvedApiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+
 // 创建 axios 实例
 const api: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: resolvedApiBaseUrl,
   timeout: 600000, // 10分钟超时，生成教案可能需要较长时间
   headers: {
     'Content-Type': 'application/json',

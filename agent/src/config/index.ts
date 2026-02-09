@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// 加载环境变量
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+const rootEnvPath = path.resolve(__dirname, '../../../.env');
+dotenv.config({ path: rootEnvPath });
 
 export interface Config {
   env: string;
@@ -14,6 +14,12 @@ export interface Config {
     model: string;
     temperature: number;
     maxTokens: number;
+  };
+
+  qwen: {
+    apiKey: string;
+    embeddingModel: string;
+    embeddingUrl: string;
   };
   
   neo4j: {
@@ -46,7 +52,7 @@ export interface Config {
 
 const config: Config = {
   env: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT || '3001', 10),
+  port: parseInt(process.env.AGENT_PORT || process.env.PORT || '13001', 10),
   
   deepseek: {
     apiKey: process.env.DEEPSEEK_API_KEY || '',
@@ -54,6 +60,12 @@ const config: Config = {
     model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
     temperature: parseFloat(process.env.DEEPSEEK_TEMPERATURE || '0.7'),
     maxTokens: parseInt(process.env.DEEPSEEK_MAX_TOKENS || '4096', 10),
+  },
+
+  qwen: {
+    apiKey: process.env.QWEN_API_KEY || '',
+    embeddingModel: process.env.QWEN_EMBEDDING_MODEL || 'text-embedding-v4',
+    embeddingUrl: process.env.QWEN_EMBEDDING_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings',
   },
   
   neo4j: {

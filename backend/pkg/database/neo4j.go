@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"lesson-plan/backend/internal/config"
 	"lesson-plan/backend/pkg/logger"
@@ -24,8 +25,30 @@ func InitNeo4j(cfg *config.Neo4jConfig) (neo4j.DriverWithContext, error) {
 	}
 
 	ctx := context.Background()
-	if err := neo4jDriver.VerifyConnectivity(ctx); err != nil {
-		return nil, fmt.Errorf("failed to verify neo4j connectivity: %w", err)
+	maxAttempts := 10
+	retryInterval := 3 * time.Second
+
+	var verifyErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		verifyErr = neo4jDriver.VerifyConnectivity(ctx)
+		if verifyErr == nil {
+			break
+		}
+
+		if attempt < maxAttempts {
+			logger.Warn("Neo4j connectivity check failed, retrying",
+				logger.String("uri", cfg.URI),
+				logger.Int("attempt", attempt),
+				logger.Int("max_attempts", maxAttempts),
+				logger.Duration("retry_in", retryInterval),
+				logger.Err(verifyErr),
+			)
+			time.Sleep(retryInterval)
+		}
+	}
+
+	if verifyErr != nil {
+		return nil, fmt.Errorf("failed to verify neo4j connectivity after %d attempts: %w", maxAttempts, verifyErr)
 	}
 
 	logger.Info("Neo4j connected successfully",
