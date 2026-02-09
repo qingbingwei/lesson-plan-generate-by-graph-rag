@@ -56,8 +56,8 @@ onMounted(() => {
   <div class="space-y-6">
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">我的收藏</h1>
-      <p class="mt-1 text-sm text-gray-500">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">我的收藏</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
         收藏的教案，方便快速查找
       </p>
     </div>
@@ -70,11 +70,11 @@ onMounted(() => {
     <!-- Empty -->
     <div
       v-else-if="lessons.length === 0"
-      class="text-center py-12 bg-white rounded-lg"
+      class="text-center py-12 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
     >
       <HeartSolidIcon class="mx-auto h-12 w-12 text-gray-400" />
-      <h3 class="mt-2 text-sm font-medium text-gray-900">暂无收藏</h3>
-      <p class="mt-1 text-sm text-gray-500">
+      <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">暂无收藏</h3>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
         浏览教案时点击收藏按钮添加到收藏夹
       </p>
       <div class="mt-6">
@@ -100,7 +100,7 @@ onMounted(() => {
               </div>
               <RouterLink
                 :to="`/lessons/${lesson.id}`"
-                class="font-medium text-gray-900 hover:text-primary-600 line-clamp-1"
+                class="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400 line-clamp-1"
               >
                 {{ lesson.title }}
               </RouterLink>
@@ -114,7 +114,7 @@ onMounted(() => {
             </button>
           </div>
 
-          <div class="mt-3 flex items-center gap-4 text-xs text-gray-500">
+          <div class="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
             <span class="flex items-center gap-1">
               <ClockIcon class="h-4 w-4" />
               {{ lesson.duration }}分钟

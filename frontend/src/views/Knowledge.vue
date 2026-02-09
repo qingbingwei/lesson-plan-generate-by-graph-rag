@@ -670,10 +670,10 @@ onUnmounted(() => {
             </span>
           </div>
           <!-- 缩放控制 -->
-          <div class="graph-zoom-controls flex items-center border rounded-md divide-x">
-            <button type="button" class="px-2 py-1 text-sm hover:bg-gray-100" title="放大" @click="zoomIn">+</button>
-            <button type="button" class="px-2 py-1 text-sm hover:bg-gray-100" title="重置" @click="zoomReset">⟳</button>
-            <button type="button" class="px-2 py-1 text-sm hover:bg-gray-100" title="缩小" @click="zoomOut">−</button>
+          <div class="graph-zoom-controls flex items-center border border-gray-200 dark:border-gray-600 rounded-md divide-x divide-gray-200 dark:divide-gray-600">
+            <button type="button" class="px-2 py-1 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/80" title="放大" @click="zoomIn">+</button>
+            <button type="button" class="px-2 py-1 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/80" title="重置" @click="zoomReset">⟳</button>
+            <button type="button" class="px-2 py-1 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/80" title="缩小" @click="zoomOut">−</button>
           </div>
         </div>
       </div>
@@ -688,7 +688,7 @@ onUnmounted(() => {
           v-if="graphData.nodes.length === 0 && !loading"
           class="absolute inset-0 flex items-center justify-center"
         >
-          <div class="graph-empty text-center text-gray-500">
+          <div class="graph-empty text-center text-gray-500 dark:text-gray-400">
             <p>暂无知识图谱数据</p>
             <p class="text-sm mt-1">请先上传文档或调整筛选条件</p>
           </div>

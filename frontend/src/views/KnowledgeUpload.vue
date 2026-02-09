@@ -1,25 +1,24 @@
-<template>
+﻿<template>
   <div class="knowledge-upload">
     <div class="page-header">
       <h1>知识库管理</h1>
       <p class="subtitle">上传文档，自动构建个人知识图谱</p>
     </div>
 
-    <!-- 上传区域 -->
-    <div class="upload-section">
-      <div 
-        class="upload-area" 
+    <div class="upload-section dark:!bg-slate-900 dark:!border-slate-700">
+      <div
+        class="upload-area dark:!bg-slate-950 dark:!border-slate-600"
         :class="{ 'drag-over': isDragOver }"
         @dragover.prevent="isDragOver = true"
         @dragleave.prevent="isDragOver = false"
         @drop.prevent="handleDrop"
         @click="triggerFileInput"
       >
-        <input 
+        <input
           ref="fileInputRef"
-          type="file" 
-          accept=".txt,.md" 
-          @change="handleFileSelect" 
+          type="file"
+          accept=".txt,.md"
+          @change="handleFileSelect"
           class="hidden-input"
         />
         <div class="upload-icon">
@@ -31,23 +30,27 @@
         <p class="upload-hint">支持 .txt 和 .md 格式，单个文件不超过 5MB</p>
       </div>
 
-      <!-- 上传选项 -->
       <div v-if="selectedFile" class="upload-options">
-        <div class="file-info">
+        <div class="file-info dark:!bg-slate-950 dark:!border-slate-700">
           <span class="file-name">{{ selectedFile.name }}</span>
           <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
           <button class="btn-remove" @click="removeFile">✕</button>
         </div>
-        
+
         <div class="options-form">
           <div class="form-group">
             <label>文档标题</label>
-            <input v-model="uploadForm.title" type="text" placeholder="可选，默认使用文件名" />
+            <input
+              v-model="uploadForm.title"
+              type="text"
+              class="dark:!bg-slate-950 dark:!border-slate-600 dark:!text-slate-100"
+              placeholder="可选，默认使用文件名"
+            />
           </div>
           <div class="form-row">
             <div class="form-group">
               <label>学科（可选）</label>
-              <select v-model="uploadForm.subject">
+              <select v-model="uploadForm.subject" class="dark:!bg-slate-950 dark:!border-slate-600 dark:!text-slate-100">
                 <option value="">不指定</option>
                 <option value="语文">语文</option>
                 <option value="数学">数学</option>
@@ -67,7 +70,7 @@
             </div>
             <div class="form-group">
               <label>年级（可选）</label>
-              <select v-model="uploadForm.grade">
+              <select v-model="uploadForm.grade" class="dark:!bg-slate-950 dark:!border-slate-600 dark:!text-slate-100">
                 <option value="">不指定</option>
                 <option value="7">七年级</option>
                 <option value="8">八年级</option>
@@ -82,7 +85,6 @@
             <span v-if="uploading">上传中... {{ uploadProgress }}%</span>
             <span v-else>开始上传</span>
           </button>
-          <!-- 上传进度条 -->
           <div v-if="uploading" class="upload-progress">
             <div class="progress-bar">
               <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
@@ -93,29 +95,28 @@
       </div>
     </div>
 
-    <!-- 文档列表 -->
-    <div class="documents-section">
+    <div class="documents-section dark:!bg-slate-900 dark:!border-slate-700">
       <h2>我的知识文档</h2>
-      
-      <div v-if="loading" class="loading-state">
+
+      <div v-if="loading" class="loading-state dark:!text-slate-300">
         <div class="spinner"></div>
         <p>加载中...</p>
       </div>
 
-      <div v-else-if="documents.length === 0" class="empty-state">
+      <div v-else-if="documents.length === 0" class="empty-state dark:!text-slate-300">
         <p>暂无上传的文档</p>
       </div>
 
       <div v-else class="document-list">
-        <div v-for="doc in documents" :key="doc.id" class="document-card">
+        <div v-for="doc in documents" :key="doc.id" class="document-card dark:!bg-slate-950 dark:!border-slate-700">
           <div class="doc-icon">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
           </div>
           <div class="doc-info">
-            <h3>{{ doc.title }}</h3>
-            <p class="doc-meta">
+            <h3 class="dark:!text-slate-100">{{ doc.title }}</h3>
+            <p class="doc-meta dark:!text-slate-300">
               <span>{{ doc.fileName }}</span>
               <span>{{ formatFileSize(doc.fileSize) }}</span>
               <span>{{ formatDate(doc.createdAt) }}</span>
@@ -132,7 +133,7 @@
             </span>
           </div>
           <div class="doc-actions">
-            <button class="btn-action btn-delete" @click="deleteDocument(doc.id)" title="删除">
+            <button class="btn-action btn-delete dark:!bg-slate-950 dark:!border-slate-600 dark:!text-slate-200" @click="deleteDocument(doc.id)" title="删除">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
               </svg>
@@ -176,7 +177,6 @@ const uploadForm = ref({
   grade: '',
 });
 
-// 触发文件选择
 const triggerFileInput = () => {
   fileInputRef.value?.click();
 };
@@ -188,7 +188,6 @@ const statusText: Record<string, string> = {
   failed: '处理失败',
 };
 
-// 加载文档列表
 const loadDocuments = async () => {
   loading.value = true;
   try {
@@ -201,7 +200,6 @@ const loadDocuments = async () => {
   }
 };
 
-// 处理文件选择
 const handleFileSelect = (event: Event) => {
   const input = event.target as HTMLInputElement;
   if (input.files && input.files[0]) {
@@ -209,7 +207,6 @@ const handleFileSelect = (event: Event) => {
   }
 };
 
-// 处理拖拽
 const handleDrop = (event: DragEvent) => {
   isDragOver.value = false;
   const files = event.dataTransfer?.files;
@@ -218,31 +215,28 @@ const handleDrop = (event: DragEvent) => {
   }
 };
 
-// 选择文件
 const selectFile = (file: File) => {
   const ext = file.name.split('.').pop()?.toLowerCase();
   if (ext !== 'txt' && ext !== 'md') {
-    alert('仅支持 .txt 和 .md 格式文件');
+    alert('仅支持 .txt 和 .md 格式文档');
     return;
   }
   if (file.size > 5 * 1024 * 1024) {
-    alert('文件大小不能超过 5MB');
+    alert('文档大小不能超过 5MB');
     return;
   }
   selectedFile.value = file;
   uploadForm.value.title = file.name.replace(/\.(txt|md)$/i, '');
 };
 
-// 移除文件
 const removeFile = () => {
   selectedFile.value = null;
   uploadForm.value = { title: '', subject: '', grade: '' };
 };
 
-// 上传文档
 const uploadDocument = async () => {
   if (!selectedFile.value) return;
-  
+
   uploading.value = true;
   uploadProgress.value = 0;
   try {
@@ -257,18 +251,14 @@ const uploadDocument = async () => {
     if (uploadForm.value.grade) {
       formData.append('grade', uploadForm.value.grade);
     }
-    
+
     await knowledgeApi.uploadDocument(formData, (percent) => {
       uploadProgress.value = percent;
     });
-    
-    // 重置表单
+
     removeFile();
-    
-    // 刷新列表
     await loadDocuments();
-    
-    alert('文档上传成功，正在后台处理中');
+    alert('文档上传成功，正在后台处理');
   } catch (error) {
     console.error('Upload failed:', error);
     alert('上传失败，请重试');
@@ -277,18 +267,15 @@ const uploadDocument = async () => {
   }
 };
 
-// 删除文档
 const deleteDocument = async (id: string) => {
   if (!confirm('确定要删除该文档吗？相关的知识图谱数据也会被删除。')) {
     return;
   }
-  
+
   try {
     await knowledgeApi.deleteDocument(id);
-    // 重置上传状态，允许重新上传
     selectedFile.value = null;
     uploadForm.value = { title: '', subject: '', grade: '' };
-    // 重置文件输入
     if (fileInputRef.value) {
       fileInputRef.value.value = '';
     }
@@ -299,14 +286,12 @@ const deleteDocument = async (id: string) => {
   }
 };
 
-// 格式化文件大小
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 };
 
-// 格式化日期
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr);
   return date.toLocaleDateString('zh-CN', {
@@ -318,10 +303,9 @@ const formatDate = (dateStr: string): string => {
 
 onMounted(() => {
   loadDocuments();
-  
-  // 轮询更新处理中的文档状态
+
   setInterval(() => {
-    const hasProcessing = documents.value.some(d => d.status === 'processing' || d.status === 'pending');
+    const hasProcessing = documents.value.some((d) => d.status === 'processing' || d.status === 'pending');
     if (hasProcessing) {
       loadDocuments();
     }
@@ -334,6 +318,7 @@ onMounted(() => {
   max-width: 900px;
   margin: 0 auto;
   padding: 2rem;
+  color: #1f2937;
 }
 
 .page-header {
@@ -351,9 +336,9 @@ onMounted(() => {
   color: #6b7280;
 }
 
-/* 上传区域 */
 .upload-section {
   background: white;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 2rem;
   margin-bottom: 2rem;
@@ -420,7 +405,6 @@ onMounted(() => {
   color: #9ca3af;
 }
 
-/* 上传选项 */
 .upload-options {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
@@ -517,9 +501,9 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-/* 文档列表 */
 .documents-section {
   background: white;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -544,14 +528,6 @@ onMounted(() => {
   min-height: 120px;
 }
 
-.loading-state p,
-.empty-state p {
-  margin: 0;
-  display: block;
-  white-space: nowrap;
-  font-size: 0.875rem;
-}
-
 .spinner {
   display: block;
   width: 32px;
@@ -564,8 +540,12 @@ onMounted(() => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .document-list {
@@ -662,10 +642,6 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.status-text {
-  flex-shrink: 0;
-}
-
 .status-pending {
   background: #fef3c7;
   color: #92400e;
@@ -689,6 +665,10 @@ onMounted(() => {
 .doc-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.doc-status {
+  flex-shrink: 0;
 }
 
 .btn-action {
@@ -716,27 +696,6 @@ onMounted(() => {
   background: #fef2f2;
 }
 
-@media (max-width: 640px) {
-  .knowledge-upload {
-    padding: 1rem;
-  }
-  
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-  
-  .document-card {
-    flex-wrap: wrap;
-  }
-  
-  .doc-status {
-    order: 3;
-    width: 100%;
-    margin-top: 0.5rem;
-  }
-}
-
-/* 上传进度条 */
 .upload-progress {
   display: flex;
   align-items: center;
@@ -767,6 +726,26 @@ onMounted(() => {
   text-align: right;
 }
 
+@media (max-width: 640px) {
+  .knowledge-upload {
+    padding: 1rem;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .document-card {
+    flex-wrap: wrap;
+  }
+
+  .doc-status {
+    order: 3;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+}
+
 :global(.dark) .knowledge-upload {
   color: #e5e7eb;
 }
@@ -774,7 +753,9 @@ onMounted(() => {
 :global(.dark) .page-header h1,
 :global(.dark) .documents-section h2,
 :global(.dark) .doc-info h3,
-:global(.dark) .file-name {
+:global(.dark) .file-name,
+:global(.dark) .upload-text,
+:global(.dark) .form-group label {
   color: #f3f4f6;
 }
 
@@ -784,81 +765,25 @@ onMounted(() => {
 :global(.dark) .empty-state,
 :global(.dark) .doc-meta,
 :global(.dark) .upload-hint {
-  color: #9ca3af;
+  color: #cbd5e1;
 }
 
 :global(.dark) .upload-section,
-:global(.dark) .documents-section {
-  background: #1f2937;
-  border: 1px solid #374151;
-  box-shadow: none;
-}
-
-:global(.dark) .upload-area {
-  border-color: #4b5563;
-  background: #111827;
+:global(.dark) .documents-section,
+:global(.dark) .upload-area,
+:global(.dark) .file-info,
+:global(.dark) .document-card,
+:global(.dark) .btn-action,
+:global(.dark) .form-group input,
+:global(.dark) .form-group select {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
 }
 
 :global(.dark) .upload-area:hover,
-:global(.dark) .upload-area.drag-over {
-  border-color: #60a5fa;
-  background: #1e293b;
-}
-
-:global(.dark) .upload-icon,
-:global(.dark) .btn-remove {
-  color: #9ca3af;
-}
-
-:global(.dark) .upload-text,
-:global(.dark) .form-group label {
-  color: #d1d5db;
-}
-
-:global(.dark) .upload-options {
-  border-top-color: #374151;
-}
-
-:global(.dark) .file-info {
-  background: #111827;
-}
-
-:global(.dark) .form-group input,
-:global(.dark) .form-group select {
-  background: #111827;
-  border-color: #4b5563;
-  color: #f3f4f6;
-}
-
-:global(.dark) .form-group input:focus,
-:global(.dark) .form-group select:focus {
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
-}
-
-:global(.dark) .spinner {
-  border-color: #374151;
-  border-top-color: #60a5fa;
-}
-
-:global(.dark) .document-card {
-  border-color: #374151;
-  background: #111827;
-}
-
-:global(.dark) .document-card:hover {
-  border-color: #4b5563;
-  box-shadow: none;
-}
-
-:global(.dark) .doc-icon {
-  background: #1e3a8a33;
-  color: #93c5fd;
-}
-
-:global(.dark) .stat {
-  color: #6ee7b7;
-  background: #064e3b;
+:global(.dark) .upload-area.drag-over,
+:global(.dark) .btn-action:hover {
+  background-color: #1e293b !important;
 }
 
 :global(.dark) .status-pending {
@@ -879,17 +804,6 @@ onMounted(() => {
 :global(.dark) .status-failed {
   background: #7f1d1d;
   color: #fca5a5;
-}
-
-:global(.dark) .btn-action {
-  border-color: #4b5563;
-  color: #d1d5db;
-}
-
-:global(.dark) .btn-delete:hover {
-  color: #fca5a5;
-  border-color: #f87171;
-  background: #7f1d1d;
 }
 
 :global(.dark) .progress-bar {

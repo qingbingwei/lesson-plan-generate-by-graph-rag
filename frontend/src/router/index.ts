@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+﻿import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 
 const routes: RouteRecordRaw[] = [
@@ -94,26 +94,22 @@ const router = createRouter({
   },
 });
 
-// 路由守卫
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore();
-  
-  // 需要认证的页面
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'Login', query: { redirect: to.fullPath } });
     return;
   }
-  
-  // 游客页面（已登录用户不能访问）
+
   if (to.meta.guest && authStore.isAuthenticated) {
     next({ name: 'Dashboard' });
     return;
   }
-  
+
   next();
 });
 
-// 设置页面标题
 router.afterEach((to) => {
   const title = to.meta.title as string;
   document.title = title ? `${title} - 智能教案生成系统` : '智能教案生成系统';
