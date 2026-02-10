@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useLessonStore } from '@/stores/lesson';
-import { getLessonVersions, rollbackToVersion } from '@/api/lesson';
+import { getLessonVersion, getLessonVersions, rollbackToVersion } from '@/api/lesson';
 import type { LessonVersion } from '@/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue';
 import {
@@ -31,6 +31,9 @@ const publishing = ref(false);
 const showVersionPanel = ref(false);
 const versions = ref<LessonVersion[]>([]);
 const versionsLoading = ref(false);
+const previewLoading = ref(false);
+const previewDialogVisible = ref(false);
+const previewVersion = ref<LessonVersion | null>(null);
 
 const showExportMenu = ref(false);
 const exporting = ref(false);
@@ -38,6 +41,21 @@ const exporting = ref(false);
 const favorites = ref<string[]>([]);
 
 const isFavorite = computed(() => favorites.value.includes(lessonId.value));
+const currentVersion = computed(() => lesson.value?.version ?? 0);
+
+type LessonSnapshotData = {
+  title?: string;
+  subject?: string;
+  grade?: string;
+  duration?: number;
+  objectives?: string;
+  content?: string;
+  activities?: string;
+  assessment?: string;
+  resources?: string;
+  status?: string;
+  tags?: string;
+};
 
 function loadFavorites() {
   const stored = localStorage.getItem('favorites');
@@ -84,12 +102,94 @@ async function handleRollback(version: number) {
       { type: 'warning' }
     );
 
-    await rollbackToVersion(lessonId.value as any, version);
+    await rollbackToVersion(lessonId.value, version);
     await lessonStore.fetchLesson(lessonId.value);
     await loadVersions();
+    previewDialogVisible.value = false;
     ElMessage.success('回滚成功');
+  } catch (err) {
+    if (err === 'cancel' || err === 'close') {
+      return;
+    }
+
+    const message =
+      (err as any)?.response?.data?.message ||
+      (err instanceof Error ? err.message : '回滚失败，请查看后端日志');
+    ElMessage.error(message);
+  }
+}
+
+function getVersionTime(version: LessonVersion): string {
+  const raw = (version as any).createdAt ?? (version as any).created_at;
+  if (!raw) return '-';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('zh-CN');
+}
+
+function getVersionSummary(version: LessonVersion): string {
+  const summary = version.changeLog || (version as any).change_log;
+  if (typeof summary === 'string' && summary.trim().length > 0) {
+    return summary;
+  }
+  return '自动保存的历史快照';
+}
+
+function parseSnapshot(content: string): LessonSnapshotData {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as LessonSnapshotData;
+    }
   } catch {
-    // cancel or fail
+    // ignore
+  }
+  return {};
+}
+
+const previewSnapshot = computed<LessonSnapshotData>(() => {
+  if (!previewVersion.value?.content || typeof previewVersion.value.content !== 'string') {
+    return {};
+  }
+  return parseSnapshot(previewVersion.value.content);
+});
+
+function previewFieldText(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return parseJsonText(value);
+}
+
+const previewTagList = computed<string[]>(() => {
+  const tagsRaw = previewSnapshot.value.tags;
+  if (!tagsRaw) return [];
+
+  try {
+    const parsed = JSON.parse(tagsRaw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map(tag => (typeof tag === 'string' ? tag : String(tag)))
+        .filter(tag => tag.trim().length > 0);
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+});
+
+async function handlePreview(version: LessonVersion) {
+  previewLoading.value = true;
+  previewDialogVisible.value = true;
+
+  try {
+    previewVersion.value = await getLessonVersion(lessonId.value, version.version);
+  } catch (err) {
+    previewVersion.value = version;
+    ElMessage.warning(err instanceof Error ? err.message : '读取版本详情失败，已展示列表中的版本信息');
+  } finally {
+    previewLoading.value = false;
   }
 }
 
@@ -196,6 +296,43 @@ onUnmounted(() => {
 });
 </script>
 
+<style scoped>
+.version-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.version-item {
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.version-item__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.version-item__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.version-item__actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.version-preview-dialog :deep(.el-dialog__body) {
+  padding-top: 8px;
+}
+</style>
+
 <template>
   <div class="page-container max-w-5xl mx-auto">
     <el-skeleton v-if="loading" :rows="8" animated />
@@ -250,24 +387,137 @@ onUnmounted(() => {
 
       <el-card v-if="showVersionPanel" class="surface-card" shadow="never">
         <template #header>
-          <span class="font-semibold">版本历史</span>
+          <div class="flex items-center justify-between gap-3">
+            <span class="font-semibold">版本历史</span>
+            <el-tag size="small" type="info">当前版本：v{{ currentVersion }}</el-tag>
+          </div>
         </template>
 
         <el-skeleton v-if="versionsLoading" :rows="4" animated />
         <el-empty v-else-if="versions.length === 0" description="暂无版本记录（编辑后将自动保存版本）" />
 
-        <el-timeline v-else>
-          <el-timeline-item v-for="v in versions" :key="v.id" :timestamp="new Date(v.createdAt).toLocaleString('zh-CN')">
-            <div class="flex items-center justify-between gap-2">
-              <div>
-                <div class="font-semibold">版本 {{ v.version }}</div>
-                <div v-if="v.changeLog" class="text-xs text-slate-500">{{ v.changeLog }}</div>
+        <div v-else class="version-list">
+          <el-card
+            v-for="v in versions"
+            :key="v.id"
+            class="version-item"
+            shadow="never"
+          >
+            <div class="version-item__header">
+              <div class="version-item__meta">
+                <div class="font-semibold">版本 v{{ v.version }}</div>
+                <div class="text-xs app-text-muted">{{ getVersionTime(v) }}</div>
               </div>
-              <el-button size="small" @click="handleRollback(v.version)">回滚</el-button>
+              <el-tag v-if="v.version === currentVersion" size="small" type="success">当前</el-tag>
             </div>
-          </el-timeline-item>
-        </el-timeline>
+
+            <div class="text-sm app-text-muted">{{ getVersionSummary(v) }}</div>
+
+            <div class="version-item__actions">
+              <el-button size="small" @click="handlePreview(v)">查看版本</el-button>
+              <el-button
+                size="small"
+                type="warning"
+                :disabled="v.version === currentVersion"
+                @click="handleRollback(v.version)"
+              >
+                回滚到此版本
+              </el-button>
+            </div>
+          </el-card>
+        </div>
       </el-card>
+
+      <el-dialog
+        v-model="previewDialogVisible"
+        width="900px"
+        destroy-on-close
+        class="version-preview-dialog"
+      >
+        <template #header>
+          <div class="font-semibold">
+            历史版本预览
+            <span v-if="previewVersion">- v{{ previewVersion.version }}</span>
+          </div>
+        </template>
+
+        <el-skeleton v-if="previewLoading" :rows="6" animated />
+
+        <template v-else>
+          <el-descriptions :column="3" border size="small" class="mb-4">
+            <el-descriptions-item label="标题">
+              {{ previewSnapshot.title || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="学科">
+              {{ previewSnapshot.subject || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="年级">
+              {{ previewSnapshot.grade || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="时长">
+              {{ previewSnapshot.duration ? `${previewSnapshot.duration} 分钟` : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="状态">
+              {{ previewSnapshot.status || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="标签">
+              <div class="flex flex-wrap gap-1">
+                <el-tag v-for="tag in previewTagList" :key="tag" size="small">{{ tag }}</el-tag>
+                <span v-if="previewTagList.length === 0">-</span>
+              </div>
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <el-collapse>
+            <el-collapse-item v-if="previewFieldText(previewSnapshot.objectives)" title="教学目标" name="objectives">
+              <div class="markdown-prose">
+                <MarkdownRenderer :content="previewFieldText(previewSnapshot.objectives)" />
+              </div>
+            </el-collapse-item>
+
+            <el-collapse-item v-if="previewFieldText(previewSnapshot.content)" title="教学内容" name="content">
+              <div class="markdown-prose">
+                <MarkdownRenderer :content="previewFieldText(previewSnapshot.content)" />
+              </div>
+            </el-collapse-item>
+
+            <el-collapse-item v-if="previewFieldText(previewSnapshot.activities)" title="教学活动" name="activities">
+              <div class="markdown-prose">
+                <MarkdownRenderer :content="previewFieldText(previewSnapshot.activities)" />
+              </div>
+            </el-collapse-item>
+
+            <el-collapse-item v-if="previewFieldText(previewSnapshot.assessment)" title="教学评价" name="assessment">
+              <div class="markdown-prose">
+                <MarkdownRenderer :content="previewFieldText(previewSnapshot.assessment)" />
+              </div>
+            </el-collapse-item>
+
+            <el-collapse-item v-if="previewFieldText(previewSnapshot.resources)" title="教学资源" name="resources">
+              <div class="markdown-prose">
+                <MarkdownRenderer :content="previewFieldText(previewSnapshot.resources)" />
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+        </template>
+
+        <template #footer>
+          <div class="flex items-center justify-between">
+            <span class="text-xs app-text-muted">可先查看版本内容，再决定是否回滚</span>
+            <div class="flex gap-2">
+              <el-button @click="previewDialogVisible = false">关闭</el-button>
+              <el-button
+                v-if="previewVersion"
+                type="warning"
+                :disabled="previewVersion.version === currentVersion"
+                @click="handleRollback(previewVersion.version)"
+              >
+                回滚到该版本
+              </el-button>
+            </div>
+          </div>
+        </template>
+      </el-dialog>
 
       <el-card v-if="(lesson as any).objectives" class="surface-card" shadow="never">
         <template #header><span class="font-semibold">教学目标</span></template>

@@ -81,7 +81,7 @@ export async function getLessonVersion(lessonId: string, version: number): Promi
 /**
  * 回滚到指定版本
  */
-export async function rollbackToVersion(lessonId: number, version: number): Promise<Lesson> {
+export async function rollbackToVersion(lessonId: string, version: number): Promise<Lesson> {
   const response = await api.post<ApiResponse<Lesson>>(`/lessons/${lessonId}/versions/${version}/rollback`);
   return response.data.data;
 }

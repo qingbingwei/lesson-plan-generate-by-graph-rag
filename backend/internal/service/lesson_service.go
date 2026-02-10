@@ -87,6 +87,97 @@ func NewLessonService(
 	}
 }
 
+func buildLessonSnapshot(lesson *model.Lesson) (string, error) {
+	contentSnapshot, err := json.Marshal(map[string]interface{}{
+		"title":      lesson.Title,
+		"objectives": lesson.Objectives,
+		"content":    lesson.Content,
+		"activities": lesson.Activities,
+		"assessment": lesson.Assessment,
+		"resources":  lesson.Resources,
+		"subject":    lesson.Subject,
+		"grade":      lesson.Grade,
+		"duration":   lesson.Duration,
+		"status":     lesson.Status,
+		"tags":       lesson.Tags,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return string(contentSnapshot), nil
+}
+
+func parseSnapshotInt(value interface{}) (int, bool) {
+	switch v := value.(type) {
+	case int:
+		return v, true
+	case int8:
+		return int(v), true
+	case int16:
+		return int(v), true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case float32:
+		return int(v), true
+	case float64:
+		return int(v), true
+	case json.Number:
+		number, err := v.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return int(number), true
+	default:
+		return 0, false
+	}
+}
+
+func applyLessonSnapshot(lesson *model.Lesson, snapshot string) error {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(snapshot), &data); err != nil {
+		return err
+	}
+
+	if title, ok := data["title"].(string); ok && title != "" {
+		lesson.Title = title
+	}
+	if objectives, ok := data["objectives"].(string); ok {
+		lesson.Objectives = objectives
+	}
+	if content, ok := data["content"].(string); ok {
+		lesson.Content = content
+	}
+	if activities, ok := data["activities"].(string); ok {
+		lesson.Activities = activities
+	}
+	if assessment, ok := data["assessment"].(string); ok {
+		lesson.Assessment = assessment
+	}
+	if resources, ok := data["resources"].(string); ok {
+		lesson.Resources = resources
+	}
+	if subject, ok := data["subject"].(string); ok && subject != "" {
+		lesson.Subject = subject
+	}
+	if grade, ok := data["grade"].(string); ok && grade != "" {
+		lesson.Grade = grade
+	}
+	if duration, ok := parseSnapshotInt(data["duration"]); ok && duration > 0 {
+		lesson.Duration = duration
+	}
+	if status, ok := data["status"].(string); ok && status != "" {
+		lesson.Status = status
+	}
+	if tags, ok := data["tags"].(string); ok {
+		lesson.Tags = tags
+	}
+
+	return nil
+}
+
 func (s *lessonService) Create(ctx context.Context, userID uuid.UUID, req *CreateLessonRequest) (*model.Lesson, error) {
 	tagsJSON, _ := json.Marshal(req.Tags)
 
@@ -183,24 +274,22 @@ func (s *lessonService) Update(ctx context.Context, id uuid.UUID, userID uuid.UU
 
 	// 保存当前版本快照
 	if s.versionRepo != nil {
-		// 将当前教案内容打包为 JSON
-		contentSnapshot, _ := json.Marshal(map[string]interface{}{
-			"title":      lesson.Title,
-			"objectives": lesson.Objectives,
-			"content":    lesson.Content,
-			"activities": lesson.Activities,
-			"assessment": lesson.Assessment,
-			"resources":  lesson.Resources,
-			"subject":    lesson.Subject,
-			"grade":      lesson.Grade,
-			"duration":   lesson.Duration,
-		})
-		snapshot := &model.LessonVersion{
-			LessonID:  lesson.ID,
-			Content:   string(contentSnapshot),
-			CreatedBy: &userID,
+		contentSnapshot, err := buildLessonSnapshot(lesson)
+		if err != nil {
+			return nil, fmt.Errorf("生成版本快照失败: %w", err)
 		}
-		_ = s.versionRepo.Create(ctx, snapshot)
+
+		snapshot := &model.LessonVersion{
+			LessonID:      lesson.ID,
+			VersionNumber: lesson.Version,
+			Content:       contentSnapshot,
+			ChangeSummary: fmt.Sprintf("编辑前快照（版本 %d）", lesson.Version),
+			CreatedBy:     &userID,
+		}
+
+		if err := s.versionRepo.Create(ctx, snapshot); err != nil {
+			return nil, fmt.Errorf("保存版本快照失败: %w", err)
+		}
 	}
 
 	// 递增版本号
@@ -401,46 +490,25 @@ func (s *lessonService) RollbackToVersion(ctx context.Context, lessonID uuid.UUI
 	}
 
 	// 先快照当前版本
-	contentSnapshot, _ := json.Marshal(map[string]interface{}{
-		"title":      lesson.Title,
-		"objectives": lesson.Objectives,
-		"content":    lesson.Content,
-		"activities": lesson.Activities,
-		"assessment": lesson.Assessment,
-		"resources":  lesson.Resources,
-		"subject":    lesson.Subject,
-		"grade":      lesson.Grade,
-		"duration":   lesson.Duration,
-	})
+	contentSnapshot, err := buildLessonSnapshot(lesson)
+	if err != nil {
+		return nil, fmt.Errorf("生成回滚快照失败: %w", err)
+	}
+
 	snapshot := &model.LessonVersion{
 		LessonID:      lesson.ID,
-		Content:       string(contentSnapshot),
-		ChangeSummary: fmt.Sprintf("回滚至版本 %d", version),
+		VersionNumber: lesson.Version,
+		Content:       contentSnapshot,
+		ChangeSummary: fmt.Sprintf("回滚前快照（版本 %d，目标版本 %d）", lesson.Version, version),
 		CreatedBy:     &userID,
 	}
-	_ = s.versionRepo.Create(ctx, snapshot)
 
-	// 从 JSON 中恢复各字段
-	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(v.Content), &data); err == nil {
-		if title, ok := data["title"].(string); ok && title != "" {
-			lesson.Title = title
-		}
-		if obj, ok := data["objectives"].(string); ok {
-			lesson.Objectives = obj
-		}
-		if content, ok := data["content"].(string); ok {
-			lesson.Content = content
-		}
-		if act, ok := data["activities"].(string); ok {
-			lesson.Activities = act
-		}
-		if assess, ok := data["assessment"].(string); ok {
-			lesson.Assessment = assess
-		}
-		if res, ok := data["resources"].(string); ok {
-			lesson.Resources = res
-		}
+	if err := s.versionRepo.Create(ctx, snapshot); err != nil {
+		return nil, fmt.Errorf("保存回滚快照失败: %w", err)
+	}
+
+	if err := applyLessonSnapshot(lesson, v.Content); err != nil {
+		return nil, fmt.Errorf("解析版本快照失败: %w", err)
 	}
 
 	lesson.Version++

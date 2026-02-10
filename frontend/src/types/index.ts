@@ -134,12 +134,12 @@ export interface GenerationProgress {
 
 // 版本相关类型
 export interface LessonVersion {
-  id: number;
-  lessonId: number;
+  id: string;
+  lessonId: string;
   version: number;
-  title: string;
-  content: Record<string, unknown>;
+  content: string;
   changeLog?: string;
+  createdBy?: string;
   createdAt: string;
 }
 
