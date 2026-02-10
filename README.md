@@ -6,7 +6,7 @@
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Vue 3 + Vite + Pinia + Tailwind CSS |
+| 前端 | Vue 3 + Vite + Pinia + Element Plus + Tailwind CSS |
 | 后端 | Go + Gin + GORM |
 | 智能体 | LangGraph + TypeScript + DeepSeek API |
 | 数据库 | PostgreSQL + Neo4j + Redis |
@@ -29,6 +29,13 @@ cp .env.example .env
 # 2. 启动所有服务
 ./start.sh
 ```
+
+> `start.sh` 已支持更稳健的依赖就绪检测与后端健康检查（`/health`）。
+> 如需调整等待时间，可在 `.env` 里设置：
+>
+> - `BACKEND_STARTUP_TIMEOUT=30`
+> - `AGENT_STARTUP_TIMEOUT=30`
+> - `DOCKER_STARTUP_TIMEOUT=60`
 
 ## 一键启动（Windows）
 
@@ -100,6 +107,10 @@ make logs-agent    # Agent 日志
 make ps            # 服务状态
 make clean         # 清理数据（慎用）
 ```
+
+## 优化方案文档
+
+- 结构分析与已实施优化：`OPTIMIZATION_PLAN.md`
 
 ## 项目结构
 

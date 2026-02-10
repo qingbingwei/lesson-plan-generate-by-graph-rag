@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"lesson-plan/backend/internal/config"
 	"lesson-plan/backend/internal/model"
@@ -20,7 +21,7 @@ type KnowledgeRepository interface {
 	SearchByEmbedding(ctx context.Context, embedding []float64, limit int) ([]model.Knowledge, error)
 	GetRelated(ctx context.Context, id string, limit int) ([]model.Knowledge, error)
 	CreateRelation(ctx context.Context, relation *model.KnowledgeRelation) error
-	GetGraph(ctx context.Context, subject, grade, userId string, limit int) (*model.KnowledgeGraph, error)
+	GetGraph(ctx context.Context, subject, grade, topic, scope, userId string, limit int) (*model.KnowledgeGraph, error)
 }
 
 type knowledgeRepository struct {
@@ -287,15 +288,27 @@ func (r *knowledgeRepository) CreateRelation(ctx context.Context, relation *mode
 	return err
 }
 
-func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, userId string, limit int) (*model.KnowledgeGraph, error) {
+func normalizeGraphScope(scope string) string {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "matched", "one_hop", "two_hop":
+		return strings.ToLower(strings.TrimSpace(scope))
+	default:
+		return "one_hop"
+	}
+}
+
+func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, topic, scope, userId string, limit int) (*model.KnowledgeGraph, error) {
 	session := r.session(ctx)
 	defer session.Close(ctx)
 
-	// 只查询用户自己创建的知识点（通过文档上传生成）
+	normalizedTopic := strings.TrimSpace(topic)
+	normalizedScope := normalizeGraphScope(scope)
+
 	params := map[string]interface{}{
 		"userId":  userId,
 		"subject": subject,
 		"grade":   grade,
+		"topic":   normalizedTopic,
 		"limit":   int64(limit),
 	}
 
@@ -314,6 +327,68 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, user
 			weight: COALESCE(rel.strength, rel.similarity, 1.0)
 		}) as relations
 	`
+
+	if normalizedTopic != "" {
+		if normalizedScope == "matched" {
+			cypher = `
+				MATCH (seed:KnowledgePoint)
+				WHERE seed.userId = $userId
+				  AND ($subject = '' OR seed.subject = $subject OR seed.subject IS NULL)
+				  AND ($grade = '' OR seed.grade CONTAINS $grade OR seed.grade IS NULL)
+				  AND (
+					toLower(COALESCE(seed.name, '')) CONTAINS toLower($topic)
+					OR any(kw IN COALESCE(seed.keywords, []) WHERE toLower(toString(kw)) CONTAINS toLower($topic))
+				  )
+				WITH seed LIMIT $limit
+				WITH collect(seed) AS nodes, collect(seed.id) AS nodeIDs
+				UNWIND nodes AS k
+				OPTIONAL MATCH (k)-[rel:DEPENDS_ON|RELATES_TO|SIMILAR_TO|PART_OF]-(related:KnowledgePoint)
+				WHERE related.id IN nodeIDs
+				RETURN k, collect(DISTINCT {
+					source: k.id,
+					target: related.id,
+					type: type(rel),
+					weight: COALESCE(rel.strength, rel.similarity, 1.0)
+				}) as relations
+			`
+		} else {
+			depth := 1
+			if normalizedScope == "two_hop" {
+				depth = 2
+			}
+
+			cypher = fmt.Sprintf(`
+				MATCH (seed:KnowledgePoint)
+				WHERE seed.userId = $userId
+				  AND ($subject = '' OR seed.subject = $subject OR seed.subject IS NULL)
+				  AND ($grade = '' OR seed.grade CONTAINS $grade OR seed.grade IS NULL)
+				  AND (
+					toLower(COALESCE(seed.name, '')) CONTAINS toLower($topic)
+					OR any(kw IN COALESCE(seed.keywords, []) WHERE toLower(toString(kw)) CONTAINS toLower($topic))
+				  )
+				WITH seed LIMIT $limit
+				WITH collect(seed) AS seeds
+				UNWIND seeds AS s
+				OPTIONAL MATCH (s)-[:DEPENDS_ON|RELATES_TO|SIMILAR_TO|PART_OF*1..%d]-(related:KnowledgePoint)
+				WHERE related.userId = $userId
+				  AND ($subject = '' OR related.subject = $subject OR related.subject IS NULL)
+				  AND ($grade = '' OR related.grade CONTAINS $grade OR related.grade IS NULL)
+				WITH seeds + collect(DISTINCT related) AS rawNodes
+				UNWIND rawNodes AS k
+				WITH DISTINCT k WHERE k IS NOT NULL
+				WITH collect(k) AS nodes, collect(k.id) AS nodeIDs
+				UNWIND nodes AS k
+				OPTIONAL MATCH (k)-[rel:DEPENDS_ON|RELATES_TO|SIMILAR_TO|PART_OF]-(related:KnowledgePoint)
+				WHERE related.id IN nodeIDs
+				RETURN k, collect(DISTINCT {
+					source: k.id,
+					target: related.id,
+					type: type(rel),
+					weight: COALESCE(rel.strength, rel.similarity, 1.0)
+				}) as relations
+			`, depth)
+		}
+	}
 
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
 		records, err := tx.Run(ctx, cypher, params)
@@ -342,7 +417,6 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, user
 				continue
 			}
 
-			// 避免重复添加节点
 			if nodeMap[nodeID] {
 				continue
 			}
@@ -420,7 +494,6 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, user
 			}
 		}
 
-		// 过滤掉引用不存在节点的边（LIMIT 可能导致部分节点被裁剪）
 		filteredEdges := make([]model.KnowledgeEdge, 0, len(graph.Edges))
 		for _, edge := range graph.Edges {
 			if nodeMap[edge.Source] && nodeMap[edge.Target] {

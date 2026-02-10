@@ -57,7 +57,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	resp, err := h.authService.Login(c.Request.Context(), &req)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
-			Error(c, http.StatusUnauthorized, "用户名或密码错误", nil)
+			Error(c, http.StatusUnauthorized, "用户名/邮箱或密码错误", nil)
 			return
 		}
 		if errors.Is(err, service.ErrUserInactive) {

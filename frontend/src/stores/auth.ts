@@ -18,12 +18,12 @@ export const useAuthStore = defineStore('auth', () => {
   const userName = computed(() => user.value?.profile?.name || user.value?.username || '');
 
   // 登录
-  async function login(username: string, password: string) {
+  async function login(account: string, password: string) {
     loading.value = true;
     error.value = null;
     
     try {
-      const response = await authApi.login({ username, password });
+      const response = await authApi.login({ username: account.trim(), password });
       token.value = response.access_token;
       refreshToken.value = response.refresh_token;
       user.value = response.user;

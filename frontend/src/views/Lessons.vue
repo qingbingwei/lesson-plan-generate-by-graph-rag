@@ -1,29 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { RouterLink } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { useLessonStore } from '@/stores/lesson';
 import { useDebounceFn } from '@/composables';
-import {
-  PlusIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  DocumentTextIcon,
-} from '@heroicons/vue/24/outline';
-import { HeartIcon as HeartOutlineIcon } from '@heroicons/vue/24/outline';
-import { HeartIcon as HeartSolidIcon } from '@heroicons/vue/24/solid';
+import { Plus, Search, Star, StarFilled } from '@element-plus/icons-vue';
 
+const router = useRouter();
 const lessonStore = useLessonStore();
 
 const lessons = computed(() => lessonStore.lessons);
 const loading = computed(() => lessonStore.loading);
 const filters = computed(() => lessonStore.filters);
 
-// 搜索防抖
 const debouncedSearch = useDebounceFn(() => {
   lessonStore.fetchLessons();
 }, 400);
 
-// 收藏功能
 const favorites = ref<string[]>([]);
 
 function loadFavorites() {
@@ -40,7 +32,7 @@ function isFavorite(lessonId: string): boolean {
 function toggleFavorite(event: MouseEvent, lessonId: string) {
   event.preventDefault();
   event.stopPropagation();
-  
+
   if (isFavorite(lessonId)) {
     favorites.value = favorites.value.filter(id => id !== lessonId);
   } else {
@@ -49,7 +41,6 @@ function toggleFavorite(event: MouseEvent, lessonId: string) {
   localStorage.setItem('favorites', JSON.stringify(favorites.value));
 }
 
-// 选项
 const subjects = [
   { value: '', label: '全部学科' },
   { value: '语文', label: '语文' },
@@ -80,14 +71,6 @@ function handleSearch() {
   lessonStore.fetchLessons();
 }
 
-// 搜索关键词高亮
-function highlightText(text: string): string {
-  const keyword = filters.value.keyword?.trim();
-  if (!keyword || !text) return text;
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
-}
-
 function handleFilterChange() {
   lessonStore.fetchLessons();
 }
@@ -103,172 +86,93 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  <div class="page-container">
+    <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">我的教案</h1>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          管理和编辑您创建的所有教案
-        </p>
+        <h1 class="page-title">我的教案</h1>
+        <p class="page-subtitle">管理和编辑您创建的所有教案</p>
       </div>
-      <RouterLink to="/generate" class="btn-primary inline-flex items-center gap-2">
-        <PlusIcon class="h-5 w-5" />
-        生成新教案
-      </RouterLink>
+      <el-button type="primary" :icon="Plus" @click="router.push('/generate')">生成新教案</el-button>
     </div>
 
-    <!-- Filters -->
-    <div class="card">
-      <div class="card-body">
-        <div class="flex flex-col lg:flex-row gap-4">
-          <!-- Search -->
-          <div class="flex-1">
-            <div class="relative">
-              <MagnifyingGlassIcon class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                v-model="filters.keyword"
-                type="text"
-                class="input pl-10"
-                placeholder="搜索教案..."
-                @input="debouncedSearch"
-                @keyup.enter="handleSearch"
-              />
-            </div>
+    <el-card class="surface-card" shadow="never">
+      <el-row :gutter="12">
+        <el-col :xs="24" :md="10">
+          <el-input
+            v-model="filters.keyword"
+            :prefix-icon="Search"
+            placeholder="搜索教案..."
+            clearable
+            @input="debouncedSearch"
+            @keyup.enter="handleSearch"
+          />
+        </el-col>
+        <el-col :xs="24" :md="14">
+          <div class="flex flex-wrap gap-2 justify-start md:justify-end mt-2 md:mt-0">
+            <el-select v-model="filters.subject" style="width: 120px" @change="handleFilterChange">
+              <el-option v-for="s in subjects" :key="s.value" :label="s.label" :value="s.value" />
+            </el-select>
+            <el-select v-model="filters.grade" style="width: 120px" @change="handleFilterChange">
+              <el-option v-for="g in grades" :key="g.value" :label="g.label" :value="g.value" />
+            </el-select>
+            <el-select v-model="filters.status" style="width: 120px" @change="handleFilterChange">
+              <el-option v-for="s in statuses" :key="s.value" :label="s.label" :value="s.value" />
+            </el-select>
+            <el-button @click="handleSearch">筛选</el-button>
           </div>
+        </el-col>
+      </el-row>
+    </el-card>
 
-          <!-- Filter dropdowns -->
-          <div class="flex flex-wrap gap-2">
-            <select
-              v-model="filters.subject"
-              class="select w-auto"
-              @change="handleFilterChange"
-            >
-              <option v-for="s in subjects" :key="s.value" :value="s.value">
-                {{ s.label }}
-              </option>
-            </select>
+    <el-card class="surface-card" shadow="never">
+      <el-table v-loading="loading" :data="lessons" stripe>
+        <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip />
+        <el-table-column prop="subject" label="学科" width="120" />
+        <el-table-column prop="grade" label="年级" width="120" />
+        <el-table-column prop="duration" label="时长(分钟)" width="110" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'published' ? 'success' : 'info'" size="small">
+              {{ row.status === 'published' ? '已发布' : '草稿' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="收藏" width="90">
+          <template #default="{ row }">
+            <el-button text circle @click="toggleFavorite($event, row.id)">
+              <el-icon :color="isFavorite(row.id) ? '#ef4444' : '#94a3b8'">
+                <StarFilled v-if="isFavorite(row.id)" />
+                <Star v-else />
+              </el-icon>
+            </el-button>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="130">
+          <template #default="{ row }">
+            {{ new Date(row.createdAt).toLocaleDateString() }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="180" fixed="right">
+          <template #default="{ row }">
+            <el-button text type="primary" @click="router.push(`/lessons/${row.id}`)">查看</el-button>
+            <el-button text @click="router.push(`/lessons/${row.id}/edit`)">编辑</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
 
-            <select
-              v-model="filters.grade"
-              class="select w-auto"
-              @change="handleFilterChange"
-            >
-              <option v-for="g in grades" :key="g.value" :value="g.value">
-                {{ g.label }}
-              </option>
-            </select>
+      <el-empty v-if="!loading && lessons.length === 0" description="暂无教案" class="py-8" />
 
-            <select
-              v-model="filters.status"
-              class="select w-auto"
-              @change="handleFilterChange"
-            >
-              <option v-for="s in statuses" :key="s.value" :value="s.value">
-                {{ s.label }}
-              </option>
-            </select>
-
-            <button type="button" class="btn-outline" @click="handleSearch">
-              <FunnelIcon class="h-5 w-5" />
-            </button>
-          </div>
-        </div>
+      <div v-if="lessonStore.totalPages > 1" class="mt-4 flex justify-between items-center">
+        <el-text type="info">共 {{ lessonStore.total }} 条记录</el-text>
+        <el-pagination
+          background
+          :current-page="lessonStore.page"
+          :page-size="1"
+          :total="lessonStore.totalPages"
+          layout="prev, pager, next"
+          @current-change="handlePageChange"
+        />
       </div>
-    </div>
-
-    <!-- Lessons list -->
-    <div class="card overflow-hidden">
-      <div v-if="loading" class="p-8 text-center">
-        <div class="loading mx-auto" />
-        <p class="mt-2 text-sm text-gray-500">加载中...</p>
-      </div>
-
-      <div v-else-if="lessons.length === 0" class="p-8 text-center">
-        <DocumentTextIcon class="mx-auto h-12 w-12 text-gray-400" />
-        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">暂无教案</h3>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">开始生成您的第一个教案吧</p>
-        <div class="mt-6">
-          <RouterLink to="/generate" class="btn-primary inline-flex items-center gap-2">
-            <PlusIcon class="h-5 w-5" />
-            生成教案
-          </RouterLink>
-        </div>
-      </div>
-
-      <ul v-else class="divide-y divide-gray-200 dark:divide-gray-700">
-        <li
-          v-for="lesson in lessons"
-          :key="lesson.id"
-          class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-        >
-          <RouterLink :to="`/lessons/${lesson.id}`" class="block">
-            <div class="flex items-start justify-between gap-4">
-              <div class="flex-1 min-w-0">
-                <h3 class="text-base font-medium text-gray-900 dark:text-gray-100 truncate" v-html="highlightText(lesson.title)">
-                </h3>
-                <div class="mt-2 flex flex-wrap items-center gap-2">
-                  <span class="badge-secondary">{{ lesson.subject }}</span>
-                  <span class="badge-secondary">{{ lesson.grade }}</span>
-                  <span class="text-sm text-gray-500">{{ lesson.duration }}分钟</span>
-                </div>
-                <p class="mt-2 text-sm text-gray-500 line-clamp-2">
-                  {{ lesson.objectives?.knowledge || '暂无描述' }}
-                </p>
-              </div>
-              <div class="flex-shrink-0 text-right flex items-start gap-2">
-                <button
-                  type="button"
-                  class="p-1.5 rounded-full transition-colors"
-                  :class="isFavorite(lesson.id) ? 'text-red-500 hover:text-red-600' : 'text-gray-400 hover:text-red-500'"
-                  :title="isFavorite(lesson.id) ? '取消收藏' : '添加收藏'"
-                  @click="toggleFavorite($event, lesson.id)"
-                >
-                  <HeartSolidIcon v-if="isFavorite(lesson.id)" class="h-5 w-5" />
-                  <HeartOutlineIcon v-else class="h-5 w-5" />
-                </button>
-                <div>
-                  <span
-                    :class="[
-                      lesson.status === 'published' ? 'badge-success' : 'badge-secondary',
-                    ]"
-                  >
-                    {{ lesson.status === 'published' ? '已发布' : '草稿' }}
-                  </span>
-                  <p class="mt-2 text-xs text-gray-500">
-                    {{ new Date(lesson.createdAt).toLocaleDateString() }}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </RouterLink>
-        </li>
-      </ul>
-
-      <!-- Pagination -->
-      <div v-if="lessonStore.totalPages > 1" class="card-footer">
-        <div class="flex items-center justify-between">
-          <p class="text-sm text-gray-700 dark:text-gray-300">
-            共 <span class="font-medium">{{ lessonStore.total }}</span> 条记录
-          </p>
-          <nav class="flex gap-1">
-            <button
-              v-for="page in lessonStore.totalPages"
-              :key="page"
-              type="button"
-              :class="[
-                'px-3 py-1 text-sm rounded',
-                page === lessonStore.page
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-              ]"
-              @click="handlePageChange(page)"
-            >
-              {{ page }}
-            </button>
-          </nav>
-        </div>
-      </div>
-    </div>
+    </el-card>
   </div>
 </template>

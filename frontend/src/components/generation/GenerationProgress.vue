@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { GenerationProgress } from '@/types';
-import {
-  CheckCircleIcon,
-  ClockIcon,
-  ExclamationCircleIcon,
-} from '@heroicons/vue/24/solid';
 
 const props = defineProps<{
   progress: GenerationProgress;
@@ -32,68 +27,47 @@ function getNodeStatus(key: string) {
   return props.progress.nodes?.[key]?.status || 'pending';
 }
 
-function getNodeIcon(status: string) {
+function getNodeType(status: string): 'success' | 'primary' | 'warning' | 'info' {
   switch (status) {
     case 'completed':
-      return CheckCircleIcon;
+      return 'success';
     case 'running':
-      return ClockIcon;
+      return 'primary';
     case 'error':
-      return ExclamationCircleIcon;
+      return 'warning';
     default:
-      return ClockIcon;
-  }
-}
-
-function getNodeClass(status: string) {
-  switch (status) {
-    case 'completed':
-      return 'text-green-500';
-    case 'running':
-      return 'text-blue-500 animate-pulse';
-    case 'error':
-      return 'text-red-500';
-    default:
-      return 'text-gray-300';
+      return 'info';
   }
 }
 </script>
 
 <template>
   <div class="space-y-4">
-    <!-- Progress bar -->
-    <div>
-      <div class="flex items-center justify-between text-sm mb-2">
-        <span class="font-medium text-gray-700">生成进度</span>
-        <span class="text-gray-500">{{ progressPercent }}%</span>
-      </div>
-      <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-        <div
-          class="h-full bg-primary-600 transition-all duration-500"
-          :style="{ width: `${progressPercent}%` }"
-        />
-      </div>
-    </div>
+    <el-progress :percentage="progressPercent" :stroke-width="10" striped striped-flow />
 
-    <!-- Nodes -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      <div
+    <el-steps :active="Math.max(0, Math.ceil((progressPercent / 100) * nodes.length) - 1)" finish-status="success" align-center>
+      <el-step
         v-for="node in nodes"
         :key="node.key"
-        class="flex items-center gap-2 p-3 bg-gray-50 rounded-lg"
+        :title="node.label"
+        :status="getNodeStatus(node.key) === 'error' ? 'error' : getNodeStatus(node.key) === 'completed' ? 'success' : getNodeStatus(node.key) === 'running' ? 'process' : 'wait'"
+      />
+    </el-steps>
+
+    <div class="flex flex-wrap gap-2">
+      <el-tag
+        v-for="node in nodes"
+        :key="node.key"
+        :type="getNodeType(getNodeStatus(node.key))"
+        effect="light"
+        round
       >
-        <component
-          :is="getNodeIcon(getNodeStatus(node.key))"
-          class="h-5 w-5 flex-shrink-0"
-          :class="getNodeClass(getNodeStatus(node.key))"
-        />
-        <span class="text-sm text-gray-700">{{ node.label }}</span>
-      </div>
+        {{ node.label }}
+      </el-tag>
     </div>
 
-    <!-- Current status -->
-    <div v-if="progress.currentNode" class="text-sm text-gray-500 text-center">
-      正在处理: {{ nodes.find(n => n.key === progress.currentNode)?.label }}
-    </div>
+    <el-text v-if="progress.currentNode" type="info">
+      正在处理：{{ nodes.find(n => n.key === progress.currentNode)?.label }}
+    </el-text>
   </div>
 </template>

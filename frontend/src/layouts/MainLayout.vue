@@ -1,30 +1,28 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { RouterLink, RouterView, useRoute } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
+import { RouterView, useRoute, useRouter } from 'vue-router';
+import { useDark, useStorage } from '@vueuse/core';
 import { useAuthStore } from '@/stores/auth';
-import { useDark } from '@vueuse/core';
 import {
-  Bars3Icon,
-  XMarkIcon,
-  HomeIcon,
-  DocumentTextIcon,
-  SparklesIcon,
-  AcademicCapIcon,
-  HeartIcon,
-  UserCircleIcon,
-  ArrowRightOnRectangleIcon,
-  CloudArrowUpIcon,
-  SunIcon,
-  MoonIcon,
-} from '@heroicons/vue/24/outline';
+  Menu,
+  House,
+  MagicStick,
+  Document,
+  Share,
+  Upload,
+  Star,
+  UserFilled,
+  SwitchButton,
+  Sunny,
+  Moon,
+  Fold,
+  Expand,
+} from '@element-plus/icons-vue';
 
 const route = useRoute();
+const router = useRouter();
 const authStore = useAuthStore();
 
-const isSidebarOpen = ref(false);
-const isUserMenuOpen = ref(false);
-
-// 暗色模式
 const isDark = useDark({
   selector: 'html',
   attribute: 'class',
@@ -32,210 +30,207 @@ const isDark = useDark({
   valueLight: '',
 });
 
-function toggleDark() {
+const mobileSidebarVisible = ref(false);
+const desktopSidebarCollapsed = useStorage('lesson-plan:sidebar-collapsed', false);
+
+const menuItems = [
+  { name: '首页', path: '/dashboard', icon: House },
+  { name: '生成教案', path: '/generate', icon: MagicStick },
+  { name: '我的教案', path: '/lessons', icon: Document },
+  { name: '知识图谱', path: '/knowledge', icon: Share },
+  { name: '知识库管理', path: '/knowledge/upload', icon: Upload },
+  { name: '我的收藏', path: '/favorites', icon: Star },
+];
+
+const activeMenu = computed(() => {
+  const currentPath = route.path;
+  const exact = menuItems.find((item) => item.path === currentPath);
+  if (exact) return exact.path;
+  const matched = menuItems.find((item) => currentPath.startsWith(`${item.path}/`));
+  return matched?.path || '/dashboard';
+});
+
+const currentTitle = computed(() => (route.meta.title as string) || '智能教案生成系统');
+
+const userName = computed(() => authStore.userName || authStore.user?.username || '用户');
+const userEmail = computed(() => {
+  const directEmail = authStore.user?.email;
+  const profileEmail = (authStore.user as { profile?: { email?: string } } | null)?.profile?.email;
+  return directEmail || profileEmail || '';
+});
+const userInitial = computed(() => userName.value.charAt(0).toUpperCase());
+
+function toggleDarkMode() {
   isDark.value = !isDark.value;
 }
 
-const navigation = [
-  { name: '首页', href: '/dashboard', icon: HomeIcon },
-  { name: '生成教案', href: '/generate', icon: SparklesIcon },
-  { name: '我的教案', href: '/lessons', icon: DocumentTextIcon },
-  { name: '知识图谱', href: '/knowledge', icon: AcademicCapIcon },
-  { name: '知识库管理', href: '/knowledge/upload', icon: CloudArrowUpIcon },
-  { name: '我的收藏', href: '/favorites', icon: HeartIcon },
-];
+function toggleDesktopSidebar() {
+  desktopSidebarCollapsed.value = !desktopSidebarCollapsed.value;
+}
 
-const currentRoute = computed(() => route.path);
+function handleMenuSelect(path: string) {
+  router.push(path);
+  mobileSidebarVisible.value = false;
+}
 
-function isActive(href: string) {
-  if (currentRoute.value === href) return true;
-  // 精确匹配：避免 /knowledge 匹配到 /knowledge/upload
-  // 只有当 href 不是其他导航项的前缀时才做 startsWith 匹配
-  const hasChildRoute = navigation.some(item => item.href !== href && item.href.startsWith(href + '/'));
-  if (hasChildRoute) return false;
-  return currentRoute.value.startsWith(href + '/');
+function goProfile() {
+  router.push('/profile');
 }
 
 function handleLogout() {
   authStore.logout();
-  window.location.href = '/login';
+  router.push('/login');
 }
+
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    authStore.fetchUser();
+  }
+});
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <!-- Mobile sidebar backdrop -->
-    <transition name="fade">
-      <div
-        v-if="isSidebarOpen"
-        class="fixed inset-0 z-40 bg-gray-900/50 lg:hidden"
-        @click="isSidebarOpen = false"
-      />
-    </transition>
-
-    <!-- Mobile sidebar -->
-    <transition name="slide-right">
-      <div
-        v-if="isSidebarOpen"
-        class="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-xl lg:hidden"
-      >
-        <div class="flex h-16 items-center justify-between px-4 border-b dark:border-gray-700">
-          <span class="text-xl font-bold text-gradient">智能教案</span>
-          <button
-            type="button"
-            class="btn-icon"
-            @click="isSidebarOpen = false"
-          >
-            <XMarkIcon class="h-6 w-6" />
-          </button>
+  <div class="min-h-screen">
+    <el-drawer
+      v-model="mobileSidebarVisible"
+      direction="ltr"
+      :with-header="false"
+      size="270px"
+      class="lg:hidden"
+    >
+      <div class="h-full flex flex-col">
+        <div class="mb-4 px-2">
+          <div class="text-lg font-semibold app-text-primary">智能教案生成系统</div>
         </div>
-        <nav class="p-4 space-y-1">
-          <RouterLink
-            v-for="item in navigation"
-            :key="item.name"
-            :to="item.href"
-            class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-            :class="[
-              isActive(item.href)
-                ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-            ]"
-            @click="isSidebarOpen = false"
-          >
-            <component :is="item.icon" class="h-5 w-5" />
-            {{ item.name }}
-          </RouterLink>
-        </nav>
+        <el-menu
+          :default-active="activeMenu"
+          class="flex-1"
+          @select="handleMenuSelect"
+        >
+          <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.name }}</span>
+          </el-menu-item>
+        </el-menu>
       </div>
-    </transition>
+    </el-drawer>
 
-    <!-- Desktop sidebar -->
-    <div class="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-      <div class="flex flex-1 flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
-        <div class="flex h-16 items-center px-6 border-b dark:border-gray-700">
-          <span class="text-xl font-bold text-gradient">智能教案生成系统</span>
-        </div>
-        <nav class="flex-1 p-4 space-y-1">
-          <RouterLink
-            v-for="item in navigation"
-            :key="item.name"
-            :to="item.href"
-            class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-            :class="[
-              isActive(item.href)
-                ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-            ]"
+    <div
+      class="hidden lg:block fixed inset-y-0 left-0 py-5 transition-all duration-300"
+      :class="desktopSidebarCollapsed ? 'w-28 px-2' : 'w-72 px-4'"
+    >
+      <el-card
+        class="surface-card h-full sidebar-card"
+        shadow="never"
+        :class="{ 'sidebar-card-collapsed': desktopSidebarCollapsed }"
+      >
+        <div class="h-full flex flex-col">
+          <div
+            class="mb-4 flex items-start"
+            :class="desktopSidebarCollapsed ? 'justify-center' : 'justify-between px-1 gap-3'"
           >
-            <component :is="item.icon" class="h-5 w-5" />
-            {{ item.name }}
-          </RouterLink>
-        </nav>
-        <div class="p-4 border-t dark:border-gray-700">
-          <div class="flex items-center gap-3 px-3 py-2">
-            <div class="flex-shrink-0">
-              <div class="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
-                <span class="text-sm font-medium text-primary-700">
-                  {{ authStore.userName.charAt(0).toUpperCase() }}
-                </span>
-              </div>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                {{ authStore.userName }}
-              </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {{ authStore.user?.email }}
-              </p>
+            <div v-if="!desktopSidebarCollapsed" class="min-w-0">
+              <div class="text-lg font-semibold app-text-primary truncate">智能教案生成系统</div>
+                </div>
+
+            <el-tooltip :content="desktopSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'" placement="right">
+              <el-button
+                :icon="desktopSidebarCollapsed ? Expand : Fold"
+                circle
+                @click="toggleDesktopSidebar"
+              />
+            </el-tooltip>
+          </div>
+
+          <el-scrollbar class="flex-1">
+            <el-menu
+              :default-active="activeMenu"
+              :collapse="desktopSidebarCollapsed"
+              :collapse-transition="false"
+              @select="handleMenuSelect"
+            >
+              <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span>{{ item.name }}</span>
+              </el-menu-item>
+            </el-menu>
+          </el-scrollbar>
+
+          <el-divider class="my-3" />
+
+          <div class="flex items-center px-2" :class="desktopSidebarCollapsed ? 'justify-center' : 'gap-3'">
+            <el-avatar :size="38" class="app-avatar">
+              {{ userInitial }}
+            </el-avatar>
+            <div v-if="!desktopSidebarCollapsed" class="min-w-0 flex-1">
+              <div class="text-sm font-medium app-text-primary truncate">{{ userName }}</div>
+              <div class="text-xs app-text-muted truncate">{{ userEmail || '未绑定邮箱' }}</div>
             </div>
           </div>
         </div>
-      </div>
+      </el-card>
     </div>
 
-    <!-- Main content -->
-    <div class="lg:pl-64">
-      <!-- Top navbar -->
-      <header class="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-white dark:bg-gray-800 dark:border-gray-700 px-4 lg:px-8">
-        <button
-          type="button"
-          class="btn-icon lg:hidden"
-          @click="isSidebarOpen = true"
-        >
-          <Bars3Icon class="h-6 w-6" />
-        </button>
+    <div class="transition-[padding] duration-300" :class="desktopSidebarCollapsed ? 'lg:pl-28' : 'lg:pl-72'">
+      <header class="sticky top-0 z-30 px-4 lg:px-8 pt-4">
+        <el-card class="surface-card" shadow="never">
+          <div class="flex items-center gap-3">
+            <el-button class="lg:hidden" :icon="Menu" circle @click="mobileSidebarVisible = true" />
 
-        <div class="flex-1" />
+            <div class="min-w-0">
+              <div class="text-sm font-semibold app-text-primary truncate">{{ currentTitle }}</div>
+              <div class="text-xs app-text-muted">智能教案工作台</div>
+            </div>
 
-        <!-- Dark mode toggle -->
-        <button
-          type="button"
-          class="btn-icon text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          @click="toggleDark()"
-          :title="isDark ? '切换到亮色模式' : '切换到暗色模式'"
-        >
-          <MoonIcon v-if="!isDark" class="h-5 w-5" />
-          <SunIcon v-else class="h-5 w-5" />
-        </button>
+            <div class="flex-1" />
 
-        <!-- User menu -->
-        <div class="relative">
-          <button
-            type="button"
-            class="flex items-center gap-2 rounded-full p-1 hover:bg-gray-100"
-            @click="isUserMenuOpen = !isUserMenuOpen"
-          >
-            <div class="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
-              <span class="text-sm font-medium text-primary-700">
-                {{ authStore.userName.charAt(0).toUpperCase() }}
+            <el-tooltip :content="isDark ? '切换到亮色模式' : '切换到暗色模式'" placement="bottom">
+              <el-button circle :icon="isDark ? Sunny : Moon" @click="toggleDarkMode" />
+            </el-tooltip>
+
+            <el-dropdown trigger="click" placement="bottom-end">
+              <span class="inline-flex cursor-pointer items-center">
+                <el-avatar :size="34" class="app-avatar">
+                  {{ userInitial }}
+                </el-avatar>
               </span>
-            </div>
-          </button>
-
-          <transition name="scale">
-            <div
-              v-if="isUserMenuOpen"
-              class="absolute right-0 mt-2 w-48 rounded-lg bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-600"
-            >
-              <div class="py-1">
-                <RouterLink
-                  to="/profile"
-                  class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-                  @click="isUserMenuOpen = false"
-                >
-                  <UserCircleIcon class="h-5 w-5" />
-                  个人中心
-                </RouterLink>
-                <button
-                  type="button"
-                  class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-                  @click="handleLogout"
-                >
-                  <ArrowRightOnRectangleIcon class="h-5 w-5" />
-                  退出登录
-                </button>
-              </div>
-            </div>
-          </transition>
-        </div>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="goProfile">
+                    <el-icon><UserFilled /></el-icon>
+                    <span>个人中心</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item divided @click="handleLogout">
+                    <el-icon><SwitchButton /></el-icon>
+                    <span>退出登录</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </el-card>
       </header>
 
-      <!-- Page content -->
-      <main class="p-4 lg:p-8">
-        <RouterView />
+      <main class="px-4 py-6 lg:px-8 lg:py-8">
+        <div class="mx-auto max-w-[1400px]">
+          <RouterView />
+        </div>
       </main>
     </div>
   </div>
 </template>
 
 <style scoped>
-.slide-right-enter-active,
-.slide-right-leave-active {
-  transition: transform 0.3s ease;
+.sidebar-card-collapsed :deep(.el-card__body) {
+  padding: 12px 8px;
 }
 
-.slide-right-enter-from,
-.slide-right-leave-to {
-  transform: translateX(-100%);
+.sidebar-card-collapsed :deep(.el-menu--collapse) {
+  width: 100%;
+}
+
+.sidebar-card-collapsed :deep(.el-menu-item),
+.sidebar-card-collapsed :deep(.el-sub-menu__title) {
+  justify-content: center;
 }
 </style>

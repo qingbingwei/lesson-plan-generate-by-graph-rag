@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"lesson-plan/backend/internal/config"
 	"lesson-plan/backend/internal/middleware"
 	"lesson-plan/backend/pkg/jwt"
 
@@ -14,6 +15,7 @@ type Router struct {
 	lessonHandler     *LessonHandler
 	generationHandler *GenerationHandler
 	knowledgeHandler  *KnowledgeHandler
+	config            *config.Config
 	jwtManager        *jwt.Manager
 }
 
@@ -24,6 +26,7 @@ func NewRouter(
 	lessonHandler *LessonHandler,
 	generationHandler *GenerationHandler,
 	knowledgeHandler *KnowledgeHandler,
+	appConfig *config.Config,
 	jwtManager *jwt.Manager,
 ) *Router {
 	return &Router{
@@ -32,17 +35,55 @@ func NewRouter(
 		lessonHandler:     lessonHandler,
 		generationHandler: generationHandler,
 		knowledgeHandler:  knowledgeHandler,
+		config:            appConfig,
 		jwtManager:        jwtManager,
 	}
 }
 
 // Setup 配置路由
 func (r *Router) Setup(engine *gin.Engine) {
+	rateLimitConfig := r.config.RateLimit
+	if rateLimitConfig.RequestsPerSecond <= 0 {
+		rateLimitConfig.RequestsPerSecond = 100
+	}
+	if rateLimitConfig.Burst <= 0 {
+		rateLimitConfig.Burst = 200
+	}
+
+	defaultCORSConfig := middleware.DefaultCORSConfig()
+	corsConfig := middleware.CORSConfig{
+		AllowOrigins:     defaultCORSConfig.AllowOrigins,
+		AllowMethods:     defaultCORSConfig.AllowMethods,
+		AllowHeaders:     defaultCORSConfig.AllowHeaders,
+		ExposeHeaders:    defaultCORSConfig.ExposeHeaders,
+		AllowCredentials: defaultCORSConfig.AllowCredentials,
+		MaxAge:           defaultCORSConfig.MaxAge,
+	}
+
+	if len(r.config.CORS.AllowedOrigins) > 0 {
+		corsConfig.AllowOrigins = r.config.CORS.AllowedOrigins
+	}
+	if len(r.config.CORS.AllowedMethods) > 0 {
+		corsConfig.AllowMethods = r.config.CORS.AllowedMethods
+	}
+	if len(r.config.CORS.AllowedHeaders) > 0 {
+		corsConfig.AllowHeaders = r.config.CORS.AllowedHeaders
+	}
+	if len(r.config.CORS.ExposedHeaders) > 0 {
+		corsConfig.ExposeHeaders = r.config.CORS.ExposedHeaders
+	}
+	if r.config.CORS.MaxAge > 0 {
+		corsConfig.MaxAge = r.config.CORS.MaxAge
+	}
+	corsConfig.AllowCredentials = r.config.CORS.AllowCredentials
+
 	// 中间件
 	engine.Use(middleware.LoggerMiddleware())
 	engine.Use(middleware.RecoveryMiddleware())
-	engine.Use(middleware.NewCORSMiddleware([]string{"*"}, true))
-	engine.Use(middleware.NewRateLimitMiddleware(100, 200))
+	engine.Use(middleware.CORSMiddleware(corsConfig))
+	if rateLimitConfig.Enabled {
+		engine.Use(middleware.NewRateLimitMiddleware(float64(rateLimitConfig.RequestsPerSecond), rateLimitConfig.Burst))
+	}
 
 	// 健康检查
 	engine.GET("/health", HealthCheck)

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"lesson-plan/backend/internal/model"
 	"lesson-plan/backend/internal/repository"
@@ -14,7 +15,7 @@ import (
 
 var (
 	ErrUserNotFound       = errors.New("用户不存在")
-	ErrInvalidCredentials = errors.New("用户名或密码错误")
+	ErrInvalidCredentials = errors.New("用户名/邮箱或密码错误")
 	ErrUserExists         = errors.New("用户名或邮箱已存在")
 	ErrInvalidPassword    = errors.New("密码格式错误")
 	ErrUserInactive       = errors.New("用户已被禁用")
@@ -79,8 +80,11 @@ func NewAuthService(userRepo repository.UserRepository, jwtManager *jwt.Manager)
 }
 
 func (s *authService) Register(ctx context.Context, req *RegisterRequest) (*model.User, error) {
+	normalizedUsername := req.Username
+	normalizedEmail := strings.ToLower(strings.TrimSpace(req.Email))
+
 	// 检查用户名是否存在
-	exists, err := s.userRepo.ExistsByUsername(ctx, req.Username)
+	exists, err := s.userRepo.ExistsByUsername(ctx, normalizedUsername)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +93,7 @@ func (s *authService) Register(ctx context.Context, req *RegisterRequest) (*mode
 	}
 
 	// 检查邮箱是否存在
-	exists, err = s.userRepo.ExistsByEmail(ctx, req.Email)
+	exists, err = s.userRepo.ExistsByEmail(ctx, normalizedEmail)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +108,8 @@ func (s *authService) Register(ctx context.Context, req *RegisterRequest) (*mode
 	}
 
 	user := &model.User{
-		Username:     req.Username,
-		Email:        req.Email,
+		Username:     normalizedUsername,
+		Email:        normalizedEmail,
 		PasswordHash: string(hashedPassword),
 		FullName:     req.FullName,
 		Role:         model.RoleTeacher,
@@ -120,7 +124,24 @@ func (s *authService) Register(ctx context.Context, req *RegisterRequest) (*mode
 }
 
 func (s *authService) Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error) {
-	user, err := s.userRepo.GetByUsername(ctx, req.Username)
+	identifier := strings.TrimSpace(req.Username)
+	if identifier == "" {
+		return nil, ErrInvalidCredentials
+	}
+
+	var (
+		user *model.User
+		err  error
+	)
+
+	if strings.Contains(identifier, "@") {
+		user, err = s.userRepo.GetByEmail(ctx, strings.ToLower(identifier))
+	} else {
+		user, err = s.userRepo.GetByUsername(ctx, identifier)
+		if err != nil {
+			user, err = s.userRepo.GetByEmail(ctx, strings.ToLower(identifier))
+		}
+	}
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -129,7 +150,6 @@ func (s *authService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 		return nil, ErrUserInactive
 	}
 
-	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}

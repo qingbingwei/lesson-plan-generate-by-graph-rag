@@ -1,152 +1,17 @@
-﻿<template>
-  <div class="knowledge-upload">
-    <div class="page-header">
-      <h1>知识库管理</h1>
-      <p class="subtitle">上传文档，自动构建个人知识图谱</p>
-    </div>
-
-    <div class="upload-section dark:!bg-slate-900 dark:!border-slate-700">
-      <div
-        class="upload-area dark:!bg-slate-950 dark:!border-slate-600"
-        :class="{ 'drag-over': isDragOver }"
-        @dragover.prevent="isDragOver = true"
-        @dragleave.prevent="isDragOver = false"
-        @drop.prevent="handleDrop"
-        @click="triggerFileInput"
-      >
-        <input
-          ref="fileInputRef"
-          type="file"
-          accept=".txt,.md"
-          @change="handleFileSelect"
-          class="hidden-input"
-        />
-        <div class="upload-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-          </svg>
-        </div>
-        <p class="upload-text">拖拽文件到此处，或 <span class="upload-link">点击上传</span></p>
-        <p class="upload-hint">支持 .txt 和 .md 格式，单个文件不超过 5MB</p>
-      </div>
-
-      <div v-if="selectedFile" class="upload-options">
-        <div class="file-info dark:!bg-slate-950 dark:!border-slate-700">
-          <span class="file-name">{{ selectedFile.name }}</span>
-          <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
-          <button class="btn-remove" @click="removeFile">✕</button>
-        </div>
-
-        <div class="options-form">
-          <div class="form-group">
-            <label>文档标题</label>
-            <input
-              v-model="uploadForm.title"
-              type="text"
-              class="dark:!bg-slate-950 dark:!border-slate-600 dark:!text-slate-100"
-              placeholder="可选，默认使用文件名"
-            />
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>学科（可选）</label>
-              <select v-model="uploadForm.subject" class="dark:!bg-slate-950 dark:!border-slate-600 dark:!text-slate-100">
-                <option value="">不指定</option>
-                <option value="语文">语文</option>
-                <option value="数学">数学</option>
-                <option value="英语">英语</option>
-                <option value="物理">物理</option>
-                <option value="化学">化学</option>
-                <option value="生物">生物</option>
-                <option value="历史">历史</option>
-                <option value="地理">地理</option>
-                <option value="政治">政治</option>
-                <option value="科学">科学</option>
-                <option value="信息技术">信息技术</option>
-                <option value="音乐">音乐</option>
-                <option value="美术">美术</option>
-                <option value="体育">体育</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>年级（可选）</label>
-              <select v-model="uploadForm.grade" class="dark:!bg-slate-950 dark:!border-slate-600 dark:!text-slate-100">
-                <option value="">不指定</option>
-                <option value="7">七年级</option>
-                <option value="8">八年级</option>
-                <option value="9">九年级</option>
-                <option value="10">高一</option>
-                <option value="11">高二</option>
-                <option value="12">高三</option>
-              </select>
-            </div>
-          </div>
-          <button class="btn-upload" @click="uploadDocument" :disabled="uploading">
-            <span v-if="uploading">上传中... {{ uploadProgress }}%</span>
-            <span v-else>开始上传</span>
-          </button>
-          <div v-if="uploading" class="upload-progress">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
-            </div>
-            <span class="progress-text">{{ uploadProgress }}%</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="documents-section dark:!bg-slate-900 dark:!border-slate-700">
-      <h2>我的知识文档</h2>
-
-      <div v-if="loading" class="loading-state dark:!text-slate-300">
-        <div class="spinner"></div>
-        <p>加载中...</p>
-      </div>
-
-      <div v-else-if="documents.length === 0" class="empty-state dark:!text-slate-300">
-        <p>暂无上传的文档</p>
-      </div>
-
-      <div v-else class="document-list">
-        <div v-for="doc in documents" :key="doc.id" class="document-card dark:!bg-slate-950 dark:!border-slate-700">
-          <div class="doc-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-            </svg>
-          </div>
-          <div class="doc-info">
-            <h3 class="dark:!text-slate-100">{{ doc.title }}</h3>
-            <p class="doc-meta dark:!text-slate-300">
-              <span>{{ doc.fileName }}</span>
-              <span>{{ formatFileSize(doc.fileSize) }}</span>
-              <span>{{ formatDate(doc.createdAt) }}</span>
-            </p>
-            <div class="doc-stats" v-if="doc.status === 'completed'">
-              <span class="stat">{{ doc.entityCount }} 个实体</span>
-              <span class="stat">{{ doc.relationCount }} 个关系</span>
-            </div>
-          </div>
-          <div class="doc-status">
-            <span :class="['status-badge', `status-${doc.status}`]">
-              <span v-if="doc.status === 'processing' || doc.status === 'pending'" class="status-spinner"></span>
-              <span class="status-text">{{ statusText[doc.status] || doc.status }}</span>
-            </span>
-          </div>
-          <div class="doc-actions">
-            <button class="btn-action btn-delete dark:!bg-slate-950 dark:!border-slate-600 dark:!text-slate-200" @click="deleteDocument(doc.id)" title="删除">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import {
+  Document,
+  Delete,
+  UploadFilled,
+  RefreshRight,
+  CircleCheckFilled,
+  CircleCloseFilled,
+  WarningFilled,
+  Loading,
+} from '@element-plus/icons-vue';
+import type { UploadFile, UploadFiles } from 'element-plus';
 import { knowledgeApi } from '@/api';
 
 interface KnowledgeDocument {
@@ -167,9 +32,8 @@ const documents = ref<KnowledgeDocument[]>([]);
 const loading = ref(false);
 const uploading = ref(false);
 const uploadProgress = ref(0);
-const isDragOver = ref(false);
 const selectedFile = ref<File | null>(null);
-const fileInputRef = ref<HTMLInputElement | null>(null);
+let pollingTimer: number | null = null;
 
 const uploadForm = ref({
   title: '',
@@ -177,9 +41,15 @@ const uploadForm = ref({
   grade: '',
 });
 
-const triggerFileInput = () => {
-  fileInputRef.value?.click();
-};
+const subjectOptions = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '科学', '信息技术', '音乐', '美术', '体育'];
+const gradeOptions = [
+  { label: '七年级', value: '7' },
+  { label: '八年级', value: '8' },
+  { label: '九年级', value: '9' },
+  { label: '高一', value: '10' },
+  { label: '高二', value: '11' },
+  { label: '高三', value: '12' },
+];
 
 const statusText: Record<string, string> = {
   pending: '待处理',
@@ -188,66 +58,113 @@ const statusText: Record<string, string> = {
   failed: '处理失败',
 };
 
-const loadDocuments = async () => {
+const hasProcessing = computed(() => documents.value.some((item) => item.status === 'processing' || item.status === 'pending'));
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
+function statusTagType(status: string): 'warning' | 'primary' | 'success' | 'danger' | 'info' {
+  if (status === 'pending') return 'warning';
+  if (status === 'processing') return 'primary';
+  if (status === 'completed') return 'success';
+  if (status === 'failed') return 'danger';
+  return 'info';
+}
+
+function statusIcon(status: string) {
+  if (status === 'completed') return CircleCheckFilled;
+  if (status === 'failed') return CircleCloseFilled;
+  if (status === 'pending' || status === 'processing') return Loading;
+  return WarningFilled;
+}
+
+function isStatusLoading(status: string): boolean {
+  return status === 'pending' || status === 'processing';
+}
+
+function resetUploadForm() {
+  selectedFile.value = null;
+  uploadForm.value = {
+    title: '',
+    subject: '',
+    grade: '',
+  };
+  uploadProgress.value = 0;
+}
+
+function validateSelectedFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (ext !== 'txt' && ext !== 'md') {
+    ElMessage.error('仅支持 .txt 和 .md 格式文档');
+    return false;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('文档大小不能超过 5MB');
+    return false;
+  }
+
+  return true;
+}
+
+function handleUploadChange(uploadFile: UploadFile, _uploadFiles: UploadFiles) {
+  const raw = uploadFile.raw;
+  if (!raw) return;
+
+  if (!validateSelectedFile(raw)) {
+    return;
+  }
+
+  selectedFile.value = raw;
+  uploadForm.value.title = raw.name.replace(/\.(txt|md)$/i, '');
+}
+
+async function loadDocuments() {
   loading.value = true;
   try {
     const response = await knowledgeApi.listDocuments();
     documents.value = response.data.data || [];
   } catch (error) {
     console.error('Failed to load documents:', error);
+    ElMessage.error('文档列表加载失败');
   } finally {
     loading.value = false;
   }
-};
+}
 
-const handleFileSelect = (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  if (input.files && input.files[0]) {
-    selectFile(input.files[0]);
-  }
-};
-
-const handleDrop = (event: DragEvent) => {
-  isDragOver.value = false;
-  const files = event.dataTransfer?.files;
-  if (files && files[0]) {
-    selectFile(files[0]);
-  }
-};
-
-const selectFile = (file: File) => {
-  const ext = file.name.split('.').pop()?.toLowerCase();
-  if (ext !== 'txt' && ext !== 'md') {
-    alert('仅支持 .txt 和 .md 格式文档');
+async function uploadDocument() {
+  if (!selectedFile.value) {
+    ElMessage.warning('请先选择文档');
     return;
   }
-  if (file.size > 5 * 1024 * 1024) {
-    alert('文档大小不能超过 5MB');
-    return;
-  }
-  selectedFile.value = file;
-  uploadForm.value.title = file.name.replace(/\.(txt|md)$/i, '');
-};
-
-const removeFile = () => {
-  selectedFile.value = null;
-  uploadForm.value = { title: '', subject: '', grade: '' };
-};
-
-const uploadDocument = async () => {
-  if (!selectedFile.value) return;
 
   uploading.value = true;
   uploadProgress.value = 0;
+
   try {
     const formData = new FormData();
     formData.append('file', selectedFile.value);
+
     if (uploadForm.value.title) {
       formData.append('title', uploadForm.value.title);
     }
+
     if (uploadForm.value.subject) {
       formData.append('subject', uploadForm.value.subject);
     }
+
     if (uploadForm.value.grade) {
       formData.append('grade', uploadForm.value.grade);
     }
@@ -256,561 +173,247 @@ const uploadDocument = async () => {
       uploadProgress.value = percent;
     });
 
-    removeFile();
+    ElMessage.success('文档上传成功，正在后台处理');
+    resetUploadForm();
     await loadDocuments();
-    alert('文档上传成功，正在后台处理');
   } catch (error) {
     console.error('Upload failed:', error);
-    alert('上传失败，请重试');
+    ElMessage.error('上传失败，请重试');
   } finally {
     uploading.value = false;
   }
-};
+}
 
-const deleteDocument = async (id: string) => {
-  if (!confirm('确定要删除该文档吗？相关的知识图谱数据也会被删除。')) {
-    return;
-  }
-
+async function deleteDocument(id: string) {
   try {
+    await ElMessageBox.confirm('确定要删除该文档吗？相关的知识图谱数据也会被删除。', '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    });
+
     await knowledgeApi.deleteDocument(id);
-    selectedFile.value = null;
-    uploadForm.value = { title: '', subject: '', grade: '' };
-    if (fileInputRef.value) {
-      fileInputRef.value.value = '';
+    ElMessage.success('删除成功');
+
+    if (selectedFile.value) {
+      resetUploadForm();
     }
+
     await loadDocuments();
   } catch (error) {
-    console.error('Delete failed:', error);
-    alert('删除失败');
+    if (error !== 'cancel') {
+      console.error('Delete failed:', error);
+      ElMessage.error('删除失败，请稍后重试');
+    }
   }
-};
-
-const formatFileSize = (bytes: number): string => {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-};
-
-const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-};
+}
 
 onMounted(() => {
   loadDocuments();
 
-  setInterval(() => {
-    const hasProcessing = documents.value.some((d) => d.status === 'processing' || d.status === 'pending');
-    if (hasProcessing) {
+  pollingTimer = window.setInterval(() => {
+    if (hasProcessing.value) {
       loadDocuments();
     }
   }, 5000);
 });
+
+onUnmounted(() => {
+  if (pollingTimer) {
+    window.clearInterval(pollingTimer);
+    pollingTimer = null;
+  }
+});
 </script>
 
+<template>
+  <div class="page-container max-w-5xl mx-auto">
+    <div class="page-header">
+      <h1 class="page-title">知识库管理</h1>
+      <p class="page-subtitle">上传文档，自动构建个人知识图谱</p>
+    </div>
+
+    <el-card class="surface-card" shadow="never">
+      <template #header>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="font-semibold">上传文档</span>
+          <el-button :icon="RefreshRight" plain @click="loadDocuments">刷新列表</el-button>
+        </div>
+      </template>
+
+      <el-upload drag :auto-upload="false" :show-file-list="false" accept=".txt,.md" :on-change="handleUploadChange">
+        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+        <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
+        <template #tip>
+          <div class="el-upload__tip">支持 .txt 和 .md 格式，单个文件不超过 5MB</div>
+        </template>
+      </el-upload>
+
+      <div v-if="selectedFile" class="mt-5 space-y-4">
+        <el-alert type="info" :closable="false" show-icon>
+          <template #title>
+            已选择文件：{{ selectedFile.name }}（{{ formatFileSize(selectedFile.size) }}）
+          </template>
+        </el-alert>
+
+        <el-form :model="uploadForm" label-position="top">
+          <el-row :gutter="16">
+            <el-col :xs="24" :md="24">
+              <el-form-item label="文档标题（可选）">
+                <el-input v-model="uploadForm.title" placeholder="默认使用文件名" />
+              </el-form-item>
+            </el-col>
+
+            <el-col :xs="24" :md="12">
+              <el-form-item label="学科（可选）">
+                <el-select v-model="uploadForm.subject" placeholder="不指定" clearable>
+                  <el-option v-for="subject in subjectOptions" :key="subject" :label="subject" :value="subject" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+
+            <el-col :xs="24" :md="12">
+              <el-form-item label="年级（可选）">
+                <el-select v-model="uploadForm.grade" placeholder="不指定" clearable>
+                  <el-option v-for="grade in gradeOptions" :key="grade.value" :label="grade.label" :value="grade.value" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </el-form>
+
+        <div class="flex items-center gap-2">
+          <el-button type="primary" :loading="uploading" @click="uploadDocument">开始上传</el-button>
+          <el-button :disabled="uploading" @click="resetUploadForm">清空</el-button>
+        </div>
+
+        <el-progress v-if="uploading || uploadProgress > 0" :percentage="uploadProgress" :status="uploadProgress === 100 ? 'success' : undefined" />
+      </div>
+    </el-card>
+
+    <el-card class="surface-card" shadow="never">
+      <template #header>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="font-semibold">我的知识文档</span>
+          <el-tag effect="plain">共 {{ documents.length }} 个</el-tag>
+        </div>
+      </template>
+
+      <el-skeleton v-if="loading" :rows="6" animated />
+
+      <el-empty v-else-if="documents.length === 0" description="暂无上传的文档" />
+
+      <el-table v-else :data="documents" stripe>
+        <el-table-column label="文档" min-width="280">
+          <template #default="{ row }">
+            <div class="flex items-center gap-2 min-w-0">
+              <el-icon class="app-icon-primary"><Document /></el-icon>
+              <div class="min-w-0">
+                <div class="font-medium app-text-primary line-clamp-1">{{ row.title }}</div>
+                <div class="text-xs app-text-muted line-clamp-1">{{ row.fileName }}</div>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="大小" width="120">
+          <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+        </el-table-column>
+
+        <el-table-column label="状态" width="140" align="center">
+          <template #default="{ row }">
+            <el-tag :type="statusTagType(row.status)" effect="light" round size="small" class="status-pill">
+              <span class="status-pill__content">
+                <el-icon :class="{ 'is-loading': isStatusLoading(row.status) }">
+                  <component :is="statusIcon(row.status)" />
+                </el-icon>
+                <span>{{ statusText[row.status] || row.status }}</span>
+              </span>
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="图谱统计" width="210">
+          <template #default="{ row }">
+            <div v-if="row.status === 'completed'" class="kg-stats-v2">
+              <div class="kg-stat-row">
+                <span class="kg-stat-key">实体</span>
+                <span class="kg-stat-value">{{ row.entityCount }}</span>
+              </div>
+              <div class="kg-stat-row">
+                <span class="kg-stat-key">关系</span>
+                <span class="kg-stat-value">{{ row.relationCount }}</span>
+              </div>
+            </div>
+            <span v-else class="text-sm app-text-muted">-</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="上传日期" width="130">
+          <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="90" fixed="right">
+          <template #default="{ row }">
+            <el-button circle type="danger" plain :icon="Delete" @click="deleteDocument(row.id)" />
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+  </div>
+</template>
+
 <style scoped>
-.knowledge-upload {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2rem;
-  color: #1f2937;
-}
-
-.page-header {
-  margin-bottom: 2rem;
-}
-
-.page-header h1 {
-  font-size: 1.75rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 0.5rem;
-}
-
-.subtitle {
-  color: #6b7280;
-}
-
-.upload-section {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 2rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.upload-area {
-  display: block;
-  border: 2px dashed #d1d5db;
-  border-radius: 8px;
-  padding: 3rem 2rem;
-  text-align: center;
-  transition: all 0.2s;
-  cursor: pointer;
-  position: relative;
-}
-
-.upload-area:hover,
-.upload-area.drag-over {
-  border-color: #3b82f6;
-  background: #eff6ff;
-}
-
-.hidden-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.upload-icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 1rem;
-  color: #9ca3af;
-}
-
-.upload-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.upload-text {
-  color: #4b5563;
-  margin-bottom: 0.5rem;
-}
-
-.upload-link {
-  color: #3b82f6;
-  cursor: pointer;
-}
-
-.upload-link:hover {
-  text-decoration: underline;
-}
-
-.upload-hint {
-  font-size: 0.875rem;
-  color: #9ca3af;
-}
-
-.upload-options {
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #e5e7eb;
-}
-
-.file-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  background: #f3f4f6;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-}
-
-.file-name {
-  font-weight: 500;
-  color: #1f2937;
-}
-
-.file-size {
-  color: #6b7280;
-  font-size: 0.875rem;
-}
-
-.btn-remove {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: #9ca3af;
-  cursor: pointer;
-  font-size: 1.25rem;
-}
-
-.btn-remove:hover {
-  color: #ef4444;
-}
-
-.options-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.form-group label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 0.5rem;
-}
-
-.form-group input,
-.form-group select {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.875rem;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.btn-upload {
-  padding: 0.75rem 1.5rem;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-upload:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.btn-upload:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.documents-section {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.documents-section h2 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 1.5rem;
-}
-
-.loading-state,
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.status-pill {
+  min-width: 84px;
   justify-content: center;
-  text-align: center;
-  padding: 3rem;
-  color: #6b7280;
-  min-height: 120px;
 }
 
-.spinner {
-  display: block;
-  width: 32px;
-  height: 32px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 1rem;
+.status-pill :deep(.el-tag__content) {
+  width: 100%;
+  line-height: 1;
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.document-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.document-card {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
-}
-
-.document-card:hover {
-  border-color: #d1d5db;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.doc-icon {
-  width: 40px;
-  height: 40px;
-  background: #eff6ff;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #3b82f6;
-  flex-shrink: 0;
-}
-
-.doc-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
-.doc-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.doc-info h3 {
-  font-size: 1rem;
-  font-weight: 500;
-  color: #1f2937;
-  margin-bottom: 0.25rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.doc-meta {
-  font-size: 0.75rem;
-  color: #9ca3af;
-  display: flex;
-  gap: 0.75rem;
-}
-
-.doc-stats {
-  margin-top: 0.25rem;
-}
-
-.stat {
-  font-size: 0.75rem;
-  color: #059669;
-  background: #ecfdf5;
-  padding: 0.125rem 0.5rem;
-  border-radius: 4px;
-  margin-right: 0.5rem;
-}
-
-.status-badge {
+.status-pill__content {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  white-space: nowrap;
-}
-
-.status-spinner {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  flex-shrink: 0;
-}
-
-.status-pending {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-processing {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.status-completed {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-failed {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.doc-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.doc-status {
-  flex-shrink: 0;
-}
-
-.btn-action {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  background: none;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  color: #6b7280;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-action svg {
-  width: 16px;
-  height: 16px;
-}
-
-.btn-delete:hover {
-  color: #ef4444;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-.upload-progress {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-}
-
-.progress-bar {
-  flex: 1;
-  height: 8px;
-  background: #e5e7eb;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #2563eb);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-.progress-text {
-  font-size: 0.75rem;
+  gap: 4px;
   font-weight: 500;
-  color: #3b82f6;
-  min-width: 36px;
-  text-align: right;
 }
 
-@media (max-width: 640px) {
-  .knowledge-upload {
-    padding: 1rem;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-
-  .document-card {
-    flex-wrap: wrap;
-  }
-
-  .doc-status {
-    order: 3;
-    width: 100%;
-    margin-top: 0.5rem;
-  }
+.status-pill__content :deep(.el-icon) {
+  font-size: 13px;
 }
 
-:global(.dark) .knowledge-upload {
-  color: #e5e7eb;
+.kg-stats-v2 {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 108px;
 }
 
-:global(.dark) .page-header h1,
-:global(.dark) .documents-section h2,
-:global(.dark) .doc-info h3,
-:global(.dark) .file-name,
-:global(.dark) .upload-text,
-:global(.dark) .form-group label {
-  color: #f3f4f6;
+.kg-stat-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--el-fill-color-light) 70%, transparent);
 }
 
-:global(.dark) .subtitle,
-:global(.dark) .file-size,
-:global(.dark) .loading-state,
-:global(.dark) .empty-state,
-:global(.dark) .doc-meta,
-:global(.dark) .upload-hint {
-  color: #cbd5e1;
+.kg-stat-key {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--app-text-muted);
 }
 
-:global(.dark) .upload-section,
-:global(.dark) .documents-section,
-:global(.dark) .upload-area,
-:global(.dark) .file-info,
-:global(.dark) .document-card,
-:global(.dark) .btn-action,
-:global(.dark) .form-group input,
-:global(.dark) .form-group select {
-  background-color: #0f172a !important;
-  border-color: #334155 !important;
-}
-
-:global(.dark) .upload-area:hover,
-:global(.dark) .upload-area.drag-over,
-:global(.dark) .btn-action:hover {
-  background-color: #1e293b !important;
-}
-
-:global(.dark) .status-pending {
-  background: #78350f;
-  color: #fcd34d;
-}
-
-:global(.dark) .status-processing {
-  background: #1e3a8a;
-  color: #93c5fd;
-}
-
-:global(.dark) .status-completed {
-  background: #065f46;
-  color: #6ee7b7;
-}
-
-:global(.dark) .status-failed {
-  background: #7f1d1d;
-  color: #fca5a5;
-}
-
-:global(.dark) .progress-bar {
-  background: #374151;
-}
-
-:global(.dark) .progress-text {
-  color: #93c5fd;
+.kg-stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
 }
 </style>

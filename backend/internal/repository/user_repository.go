@@ -56,7 +56,7 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*m
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	var user model.User
-	err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	err := r.db.WithContext(ctx).Where("LOWER(email) = LOWER(?)", email).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (r *userRepository) ExistsByUsername(ctx context.Context, username string) 
 
 func (r *userRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&model.User{}).Where("email = ?", email).Count(&count).Error
+	err := r.db.WithContext(ctx).Model(&model.User{}).Where("LOWER(email) = LOWER(?)", email).Count(&count).Error
 	return count > 0, err
 }
 

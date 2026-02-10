@@ -1,33 +1,26 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { useLessonStore } from '@/stores/lesson';
-import { RouterLink } from 'vue-router';
-import {
-  TrashIcon,
-  ClockIcon,
-} from '@heroicons/vue/24/outline';
-import { HeartIcon as HeartSolidIcon } from '@heroicons/vue/24/solid';
+import { Star, StarFilled, Delete } from '@element-plus/icons-vue';
 
+const router = useRouter();
 const lessonStore = useLessonStore();
 const loading = ref(false);
 const favorites = ref<string[]>([]);
 
-const lessons = computed(() => 
+const lessons = computed(() =>
   lessonStore.lessons.filter(l => favorites.value.includes(l.id))
 );
 
 async function loadFavorites() {
   loading.value = true;
   try {
-    // 从本地存储获取收藏列表
     const stored = localStorage.getItem('favorites');
     if (stored) {
       favorites.value = JSON.parse(stored);
     }
-    // 加载所有教案
     await lessonStore.fetchLessons();
-  } catch (error) {
-    console.error('Failed to load favorites:', error);
   } finally {
     loading.value = false;
   }
@@ -53,98 +46,51 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Header -->
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">我的收藏</h1>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        收藏的教案，方便快速查找
-      </p>
+  <div class="page-container">
+    <div class="page-header">
+      <h1 class="page-title">我的收藏</h1>
+      <p class="page-subtitle">收藏的教案，方便快速查找</p>
     </div>
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-12">
-      <div class="loading loading-lg" />
-    </div>
+    <el-card class="surface-card" shadow="never">
+      <el-skeleton v-if="loading" :rows="4" animated />
 
-    <!-- Empty -->
-    <div
-      v-else-if="lessons.length === 0"
-      class="text-center py-12 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
-    >
-      <HeartSolidIcon class="mx-auto h-12 w-12 text-gray-400" />
-      <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">暂无收藏</h3>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        浏览教案时点击收藏按钮添加到收藏夹
-      </p>
-      <div class="mt-6">
-        <RouterLink to="/lessons" class="btn-primary">
-          浏览教案
-        </RouterLink>
-      </div>
-    </div>
+      <el-empty v-else-if="lessons.length === 0" description="暂无收藏">
+        <template #image>
+          <el-icon :size="48" class="app-icon-muted"><Star /></el-icon>
+        </template>
+        <el-button type="primary" @click="router.push('/lessons')">浏览教案</el-button>
+      </el-empty>
 
-    <!-- List -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div
-        v-for="lesson in lessons"
-        :key="lesson.id"
-        class="card group hover:shadow-lg transition-shadow"
-      >
-        <div class="card-body">
-          <div class="flex items-start justify-between">
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-2">
-                <span class="badge-secondary text-xs">{{ lesson.subject }}</span>
-                <span class="badge-secondary text-xs">{{ lesson.grade }}</span>
+      <el-row v-else :gutter="16">
+        <el-col v-for="lesson in lessons" :key="lesson.id" :xs="24" :sm="12" :lg="8" class="mb-4">
+          <el-card class="surface-card card-hover" shadow="never">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex gap-1 mb-2">
+                  <el-tag size="small" effect="plain">{{ lesson.subject }}</el-tag>
+                  <el-tag size="small" effect="plain">{{ lesson.grade }}</el-tag>
+                </div>
+                <div class="font-semibold app-text-primary line-clamp-1">{{ lesson.title }}</div>
               </div>
-              <RouterLink
-                :to="`/lessons/${lesson.id}`"
-                class="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400 line-clamp-1"
-              >
-                {{ lesson.title }}
-              </RouterLink>
+              <el-button text circle @click="removeFavorite(lesson.id)">
+                <el-icon class="app-icon-danger"><StarFilled /></el-icon>
+              </el-button>
             </div>
-            <button
-              type="button"
-              class="p-1 text-red-500 hover:text-red-600 transition-colors"
-              @click="removeFavorite(lesson.id)"
-            >
-              <HeartSolidIcon class="h-5 w-5" />
-            </button>
-          </div>
 
-          <div class="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-            <span class="flex items-center gap-1">
-              <ClockIcon class="h-4 w-4" />
-              {{ lesson.duration }}分钟
-            </span>
-            <span>{{ formatDate(lesson.updatedAt) }}</span>
-          </div>
+            <div class="mt-3 text-xs app-text-muted">
+              <div>时长：{{ lesson.duration }}分钟</div>
+              <div class="mt-1">更新：{{ formatDate(lesson.updatedAt) }}</div>
+            </div>
 
-          <div class="mt-4 flex items-center gap-2">
-            <RouterLink
-              :to="`/lessons/${lesson.id}`"
-              class="btn-outline btn-sm flex-1 text-center"
-            >
-              查看
-            </RouterLink>
-            <RouterLink
-              :to="`/lessons/${lesson.id}/edit`"
-              class="btn-outline btn-sm flex-1 text-center"
-            >
-              编辑
-            </RouterLink>
-            <button
-              type="button"
-              class="btn-ghost btn-sm text-red-500"
-              @click="removeFavorite(lesson.id)"
-            >
-              <TrashIcon class="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            <div class="mt-4 flex gap-2">
+              <el-button class="!w-full" @click="router.push(`/lessons/${lesson.id}`)">查看</el-button>
+              <el-button class="!w-full" @click="router.push(`/lessons/${lesson.id}/edit`)">编辑</el-button>
+              <el-button type="danger" plain :icon="Delete" @click="removeFavorite(lesson.id)" />
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </el-card>
   </div>
 </template>

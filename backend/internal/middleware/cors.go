@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -51,44 +52,57 @@ func DefaultCORSConfig() CORSConfig {
 
 // CORSMiddleware CORS中间件
 func CORSMiddleware(config CORSConfig) gin.HandlerFunc {
-	allowOrigins := strings.Join(config.AllowOrigins, ", ")
 	allowMethods := strings.Join(config.AllowMethods, ", ")
 	allowHeaders := strings.Join(config.AllowHeaders, ", ")
 	exposeHeaders := strings.Join(config.ExposeHeaders, ", ")
+	maxAge := strconv.Itoa(config.MaxAge)
+
+	allowAllOrigins := len(config.AllowOrigins) == 1 && config.AllowOrigins[0] == "*"
 
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
 		// 检查origin是否允许
-		if len(config.AllowOrigins) == 1 && config.AllowOrigins[0] == "*" {
+		switch {
+		case allowAllOrigins && config.AllowCredentials && origin != "":
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		case allowAllOrigins:
 			c.Header("Access-Control-Allow-Origin", "*")
-		} else {
-			for _, o := range config.AllowOrigins {
-				if o == origin {
-					c.Header("Access-Control-Allow-Origin", origin)
-					break
-				}
-			}
+		case origin != "" && isOriginAllowed(config.AllowOrigins, origin):
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
 		}
 
 		if config.AllowCredentials {
 			c.Header("Access-Control-Allow-Credentials", "true")
 		}
 
+		if exposeHeaders != "" {
+			c.Header("Access-Control-Expose-Headers", exposeHeaders)
+		}
+
 		if c.Request.Method == http.MethodOptions {
 			c.Header("Access-Control-Allow-Methods", allowMethods)
 			c.Header("Access-Control-Allow-Headers", allowHeaders)
-			c.Header("Access-Control-Expose-Headers", exposeHeaders)
-			c.Header("Access-Control-Max-Age", "86400")
+			if maxAge != "" {
+				c.Header("Access-Control-Max-Age", maxAge)
+			}
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 
-		c.Header("Access-Control-Allow-Origin", allowOrigins)
-		c.Header("Access-Control-Expose-Headers", exposeHeaders)
-
 		c.Next()
 	}
+}
+
+func isOriginAllowed(allowedOrigins []string, origin string) bool {
+	for _, o := range allowedOrigins {
+		if o == "*" || o == origin {
+			return true
+		}
+	}
+	return false
 }
 
 // NewCORSMiddleware 创建CORS中间件

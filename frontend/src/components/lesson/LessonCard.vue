@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { RouterLink } from 'vue-router';
+import { useRouter } from 'vue-router';
 import type { Lesson } from '@/types';
-import { ClockIcon, BookOpenIcon } from '@heroicons/vue/24/outline';
-import { HeartIcon as HeartSolidIcon } from '@heroicons/vue/24/solid';
-import { HeartIcon as HeartOutlineIcon } from '@heroicons/vue/24/outline';
+import { Star, StarFilled } from '@element-plus/icons-vue';
 
 const props = defineProps<{
   lesson: Lesson;
@@ -16,15 +14,15 @@ const emit = defineEmits<{
   delete: [id: string];
 }>();
 
-const statusClass = computed(() => {
-  return props.lesson.status === 'published'
-    ? 'badge-success'
-    : 'badge-warning';
-});
+const router = useRouter();
 
-const statusText = computed(() => {
-  return props.lesson.status === 'published' ? '已发布' : '草稿';
-});
+const statusType = computed<'success' | 'warning'>(() =>
+  props.lesson.status === 'published' ? 'success' : 'warning'
+);
+
+const statusText = computed(() =>
+  props.lesson.status === 'published' ? '已发布' : '草稿'
+);
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -34,62 +32,44 @@ function formatDate(dateStr: string): string {
     day: 'numeric',
   });
 }
+
+function goDetail() {
+  router.push(`/lessons/${props.lesson.id}`);
+}
+
+function goEdit() {
+  router.push(`/lessons/${props.lesson.id}/edit`);
+}
 </script>
 
 <template>
-  <div class="card hover:shadow-lg transition-shadow">
-    <div class="card-body">
-      <div class="flex items-start justify-between">
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="badge-secondary text-xs">{{ lesson.subject }}</span>
-            <span class="badge-secondary text-xs">{{ lesson.grade }}</span>
-            <span :class="statusClass" class="text-xs">{{ statusText }}</span>
-          </div>
-          <RouterLink
-            :to="`/lessons/${lesson.id}`"
-            class="text-lg font-medium text-gray-900 hover:text-primary-600 line-clamp-1"
-          >
-            {{ lesson.title }}
-          </RouterLink>
+  <el-card class="surface-card card-hover" shadow="never">
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-2">
+          <el-tag size="small" effect="plain">{{ lesson.subject }}</el-tag>
+          <el-tag size="small" effect="plain">{{ lesson.grade }}</el-tag>
+          <el-tag size="small" :type="statusType">{{ statusText }}</el-tag>
         </div>
-        <button
-          type="button"
-          class="p-1 transition-colors"
-          :class="isFavorite ? 'text-red-500' : 'text-gray-400 hover:text-red-500'"
-          @click="emit('favorite', lesson.id)"
-        >
-          <HeartSolidIcon v-if="isFavorite" class="h-5 w-5" />
-          <HeartOutlineIcon v-else class="h-5 w-5" />
-        </button>
+        <h3 class="text-base font-semibold app-text-primary line-clamp-1">{{ lesson.title }}</h3>
       </div>
-
-      <div class="mt-3 flex items-center gap-4 text-xs text-gray-500">
-        <span class="flex items-center gap-1">
-          <ClockIcon class="h-4 w-4" />
-          {{ lesson.duration }}分钟
-        </span>
-        <span class="flex items-center gap-1">
-          <BookOpenIcon class="h-4 w-4" />
-          v{{ lesson.version }}
-        </span>
-        <span>{{ formatDate(lesson.updatedAt) }}</span>
-      </div>
-
-      <div class="mt-4 flex items-center gap-2">
-        <RouterLink
-          :to="`/lessons/${lesson.id}`"
-          class="btn-outline btn-sm flex-1 text-center"
-        >
-          查看
-        </RouterLink>
-        <RouterLink
-          :to="`/lessons/${lesson.id}/edit`"
-          class="btn-outline btn-sm flex-1 text-center"
-        >
-          编辑
-        </RouterLink>
-      </div>
+      <el-button text circle @click="emit('favorite', lesson.id)">
+        <el-icon :color="isFavorite ? '#ef4444' : '#94a3b8'">
+          <StarFilled v-if="isFavorite" />
+          <Star v-else />
+        </el-icon>
+      </el-button>
     </div>
-  </div>
+
+    <div class="mt-3 flex flex-wrap items-center gap-3 text-xs app-text-muted">
+      <span>时长：{{ lesson.duration }}分钟</span>
+      <span>版本：v{{ lesson.version }}</span>
+      <span>{{ formatDate(lesson.updatedAt) }}</span>
+    </div>
+
+    <div class="mt-4 flex gap-2">
+      <el-button type="primary" plain class="!w-full" @click="goDetail">查看</el-button>
+      <el-button class="!w-full" @click="goEdit">编辑</el-button>
+    </div>
+  </el-card>
 </template>

@@ -106,7 +106,7 @@ func main() {
 	knowledgeHandler := handler.NewKnowledgeHandler(documentService)
 
 	// 初始化路由
-	router := handler.NewRouter(authHandler, userHandler, lessonHandler, generationHandler, knowledgeHandler, jwtManager)
+	router := handler.NewRouter(authHandler, userHandler, lessonHandler, generationHandler, knowledgeHandler, cfg, jwtManager)
 
 	// 设置Gin模式
 	if cfg.App.Env == "production" {

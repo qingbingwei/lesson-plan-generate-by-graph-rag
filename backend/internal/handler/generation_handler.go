@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"lesson-plan/backend/internal/middleware"
 	"lesson-plan/backend/internal/model"
@@ -130,6 +131,8 @@ func (h *GenerationHandler) SearchKnowledge(c *gin.Context) {
 func (h *GenerationHandler) GetKnowledgeGraph(c *gin.Context) {
 	subject := c.Query("subject")
 	grade := c.Query("grade")
+	topic := strings.TrimSpace(c.Query("topic"))
+	scope := strings.TrimSpace(c.Query("scope"))
 	limit := 50
 	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 && l <= 500 {
 		limit = l
@@ -138,7 +141,7 @@ func (h *GenerationHandler) GetKnowledgeGraph(c *gin.Context) {
 	// 获取当前用户ID，只展示用户自己的知识图谱
 	userIdStr, _ := middleware.GetCurrentUserID(c)
 
-	graph, err := h.knowledgeService.GetGraph(c.Request.Context(), subject, grade, userIdStr, limit)
+	graph, err := h.knowledgeService.GetGraph(c.Request.Context(), subject, grade, topic, scope, userIdStr, limit)
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "获取图谱失败", err.Error())
 		return

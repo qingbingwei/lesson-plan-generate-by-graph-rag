@@ -16,7 +16,7 @@ import (
 // KnowledgeService 知识服务接口
 type KnowledgeService interface {
 	Search(ctx context.Context, query string, limit int) ([]model.KnowledgeSearchResult, error)
-	GetGraph(ctx context.Context, subject, grade, userId string, limit int) (*model.KnowledgeGraph, error)
+	GetGraph(ctx context.Context, subject, grade, topic, scope, userId string, limit int) (*model.KnowledgeGraph, error)
 	GetEmbedding(ctx context.Context, text string) ([]float64, error)
 }
 
@@ -84,8 +84,8 @@ func (s *knowledgeService) Search(ctx context.Context, query string, limit int) 
 	return results, nil
 }
 
-func (s *knowledgeService) GetGraph(ctx context.Context, subject, grade, userId string, limit int) (*model.KnowledgeGraph, error) {
-	return s.knowledgeRepo.GetGraph(ctx, subject, grade, userId, limit)
+func (s *knowledgeService) GetGraph(ctx context.Context, subject, grade, topic, scope, userId string, limit int) (*model.KnowledgeGraph, error) {
+	return s.knowledgeRepo.GetGraph(ctx, subject, grade, topic, scope, userId, limit)
 }
 
 func (s *knowledgeService) GetEmbedding(ctx context.Context, text string) ([]float64, error) {
