@@ -210,7 +210,7 @@ function parseJsonText(value: any): string {
     <template v-else-if="lesson">
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
+        <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 mb-2">
             <span class="badge-secondary">{{ lesson.subject }}</span>
             <span class="badge-secondary">{{ lesson.grade }}</span>
@@ -234,10 +234,10 @@ function parseJsonText(value: any): string {
             </span>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-nowrap shrink-0 overflow-x-auto max-w-full pb-1 sm:pb-0">
           <button
             type="button"
-            class="btn-outline btn-sm inline-flex items-center gap-1"
+            class="btn-outline btn-sm inline-flex items-center gap-1 shrink-0 whitespace-nowrap"
             :class="isFavorite ? 'text-red-500 border-red-500 hover:bg-red-50' : ''"
             @click="toggleFavorite"
           >
@@ -248,7 +248,7 @@ function parseJsonText(value: any): string {
           <button
             v-if="lesson.status === 'draft'"
             type="button"
-            class="btn-success btn-sm"
+            class="btn-success btn-sm shrink-0 whitespace-nowrap"
             :disabled="publishing"
             @click="handlePublish"
           >
@@ -256,7 +256,7 @@ function parseJsonText(value: any): string {
           </button>
           <RouterLink
             :to="`/lessons/${lesson.id}/edit`"
-            class="btn-outline btn-sm inline-flex items-center gap-1"
+            class="btn-outline btn-sm inline-flex items-center gap-1 shrink-0 whitespace-nowrap"
           >
             <PencilIcon class="h-4 w-4" />
             编辑
@@ -266,7 +266,7 @@ function parseJsonText(value: any): string {
           <div class="relative">
             <button
               type="button"
-              class="btn-outline btn-sm inline-flex items-center gap-1"
+              class="btn-outline btn-sm inline-flex items-center gap-1 shrink-0 whitespace-nowrap"
               :disabled="exporting"
               @click="showExportMenu = !showExportMenu"
             >
@@ -305,7 +305,7 @@ function parseJsonText(value: any): string {
           
           <button
             type="button"
-            class="btn-outline btn-sm inline-flex items-center gap-1"
+            class="btn-outline btn-sm inline-flex items-center gap-1 shrink-0 whitespace-nowrap"
             @click="toggleVersionPanel"
           >
             <ClockIcon class="h-4 w-4" />
@@ -313,14 +313,14 @@ function parseJsonText(value: any): string {
           </button>
           <button
             type="button"
-            class="btn-outline btn-sm inline-flex items-center gap-1"
+            class="btn-outline btn-sm inline-flex items-center gap-1 shrink-0 whitespace-nowrap"
           >
             <ShareIcon class="h-4 w-4" />
             分享
           </button>
           <button
             type="button"
-            class="btn-danger btn-sm inline-flex items-center gap-1"
+            class="btn-danger btn-sm inline-flex items-center gap-1 shrink-0 whitespace-nowrap"
             @click="handleDelete"
           >
             <TrashIcon class="h-4 w-4" />
