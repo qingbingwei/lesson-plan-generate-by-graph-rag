@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { useAuthStore } from '@/stores/auth';
+import { getApiKeyHeaders } from '@/utils/apiKeys';
 import type { ApiResponse } from '@/types';
 
 function normalizeApiBaseUrl(rawValue?: string): string {
@@ -39,11 +40,16 @@ const api: AxiosInstance = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const authStore = useAuthStore();
-    
+
     if (authStore.token) {
       config.headers.Authorization = `Bearer ${authStore.token}`;
     }
-    
+
+    const apiKeyHeaders = getApiKeyHeaders();
+    Object.entries(apiKeyHeaders).forEach(([key, value]) => {
+      config.headers[key] = value;
+    });
+
     return config;
   },
   (error: AxiosError) => {
@@ -130,11 +136,16 @@ export const agentApi: AxiosInstance = axios.create({
 agentApi.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const authStore = useAuthStore();
-    
+
     if (authStore.token) {
       config.headers.Authorization = `Bearer ${authStore.token}`;
     }
-    
+
+    const apiKeyHeaders = getApiKeyHeaders();
+    Object.entries(apiKeyHeaders).forEach(([key, value]) => {
+      config.headers[key] = value;
+    });
+
     return config;
   },
   (error: AxiosError) => {

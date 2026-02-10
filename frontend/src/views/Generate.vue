@@ -69,7 +69,7 @@ const isValid = computed(() => {
 async function handleGenerate() {
   if (!isValid.value) return;
 
-  generationStore.streamGenerateLesson({
+  await generationStore.generateLesson({
     subject: form.value.subject,
     grade: form.value.grade,
     topic: form.value.topic,
@@ -77,10 +77,6 @@ async function handleGenerate() {
     style: form.value.style || undefined,
     requirements: form.value.requirements || undefined,
   });
-}
-
-function handleCancel() {
-  generationStore.cancelGeneration();
 }
 
 async function handleSave() {
@@ -214,7 +210,6 @@ function handleRegenerate() {
           <el-button type="primary" :icon="MagicStick" :loading="isGenerating" :disabled="!isValid" @click="handleGenerate">
             开始生成
           </el-button>
-          <el-button v-if="isGenerating" @click="handleCancel">取消</el-button>
         </div>
       </el-form>
     </el-card>

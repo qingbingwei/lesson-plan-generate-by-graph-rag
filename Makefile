@@ -59,6 +59,12 @@ init-db: ## 初始化数据库
 	docker-compose exec -T neo4j cypher-shell -u neo4j -p $(NEO4J_PASSWORD) -f /var/lib/neo4j/import/init.cypher
 	@echo "✅ 数据库初始化完成"
 
+.PHONY: migrate-drop-cost
+migrate-drop-cost: ## 移除历史cost列（generations/generation_logs）
+	@echo "正在执行迁移：移除 cost 列..."
+	docker-compose exec -T postgres psql -U admin -d lesson_plan < database/postgres/migrations/20260210_drop_cost_columns.sql
+	@echo "✅ 迁移完成"
+
 .PHONY: seed-db
 seed-db: ## 导入样例数据
 	@echo "正在导入样例数据..."

@@ -3,6 +3,12 @@ import logger from '../utils/logger';
 import { runLessonWorkflow, streamLessonWorkflow } from '../workflow/lessonWorkflow';
 import { runBuildGraphWorkflow, BuildGraphRequest } from '../workflow/buildGraphWorkflow';
 import { getDeepSeekClient } from '../clients/deepseek';
+import {
+  withRequestApiKeys,
+  GENERATION_API_KEY_HEADER,
+  EMBEDDING_API_KEY_HEADER,
+  type RequestApiKeyOverrides,
+} from '../context/requestApiKeys';
 import type { GenerateLessonRequest, RegenerateSectionRequest } from '../types';
 
 /**
@@ -14,6 +20,16 @@ export function healthCheck(_req: Request, res: Response) {
     timestamp: new Date().toISOString(),
     version: '1.0.0',
   });
+}
+
+function resolveApiKeyOverrides(req: Request): RequestApiKeyOverrides {
+  const generationApiKey = (req.header(GENERATION_API_KEY_HEADER) || '').trim();
+  const embeddingApiKey = (req.header(EMBEDDING_API_KEY_HEADER) || '').trim();
+
+  return {
+    generationApiKey: generationApiKey || undefined,
+    embeddingApiKey: embeddingApiKey || undefined,
+  };
 }
 
 /**
@@ -38,7 +54,8 @@ export async function generateLesson(req: Request, res: Response) {
       duration: request.duration,
     });
 
-    const result = await runLessonWorkflow(request);
+    const apiKeyOverrides = resolveApiKeyOverrides(req);
+    const result = await withRequestApiKeys(apiKeyOverrides, async () => runLessonWorkflow(request));
     res.json(result);
   } catch (error) {
     logger.error('Generate lesson error', { error });
@@ -74,9 +91,13 @@ export async function streamGenerateLesson(req: Request, res: Response) {
       topic: request.topic,
     });
 
-    for await (const event of streamLessonWorkflow(request)) {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    }
+    const apiKeyOverrides = resolveApiKeyOverrides(req);
+
+    await withRequestApiKeys(apiKeyOverrides, async () => {
+      for await (const event of streamLessonWorkflow(request)) {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+    });
 
     res.write('data: [DONE]\n\n');
     res.end();
@@ -116,7 +137,8 @@ export async function buildGraph(req: Request, res: Response) {
       contentLength: request.content.length,
     });
 
-    const result = await runBuildGraphWorkflow(request);
+    const apiKeyOverrides = resolveApiKeyOverrides(req);
+    const result = await withRequestApiKeys(apiKeyOverrides, async () => runBuildGraphWorkflow(request));
     res.json(result);
   } catch (error) {
     logger.error('Build graph error', { error });
@@ -182,16 +204,19 @@ export async function regenerateSection(req: Request, res: Response) {
       section: request.section,
     });
 
-    const deepseek = getDeepSeekClient();
-    const prompt = buildRegenerationPrompt(request);
+    const apiKeyOverrides = resolveApiKeyOverrides(req);
 
-    const { content, usage } = await deepseek.chat(
-      [
-        { role: 'system', content: '你是一位经验丰富的教学设计专家。请根据用户的要求重新生成教案的指定部分。' },
-        { role: 'user', content: prompt },
-      ],
-      { temperature: 0.7 }
-    );
+    const { content, usage } = await withRequestApiKeys(apiKeyOverrides, async () => {
+      const deepseek = getDeepSeekClient();
+      const prompt = buildRegenerationPrompt(request);
+      return deepseek.chat(
+        [
+          { role: 'system', content: '你是一位经验丰富的教学设计专家。请根据用户的要求重新生成教案的指定部分。' },
+          { role: 'user', content: prompt },
+        ],
+        { temperature: 0.7 }
+      );
+    });
 
     res.json({
       success: true,
@@ -211,6 +236,37 @@ export async function regenerateSection(req: Request, res: Response) {
 /**
  * 知识图谱查询
  */
+
+/**
+ * 生成 Embedding
+ */
+export async function createEmbedding(req: Request, res: Response) {
+  try {
+    const { text } = req.body as { text?: string };
+    if (!text || !text.trim()) {
+      res.status(400).json({
+        error: '缺少必要参数：text',
+      });
+      return;
+    }
+
+    const apiKeyOverrides = resolveApiKeyOverrides(req);
+    const embedding = await withRequestApiKeys(apiKeyOverrides, async () => {
+      const deepseek = getDeepSeekClient();
+      return deepseek.createEmbedding(text);
+    });
+
+    res.json({
+      embedding,
+    });
+  } catch (error) {
+    logger.error('Create embedding error', { error });
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
 export async function queryKnowledge(req: Request, res: Response) {
   try {
     const { subject, grade, topic } = req.query;

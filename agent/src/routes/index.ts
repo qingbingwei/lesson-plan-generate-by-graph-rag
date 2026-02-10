@@ -8,6 +8,7 @@ import {
   regenerateSection,
   queryKnowledge,
   getKnowledgeSubgraph,
+  createEmbedding,
 } from '../controllers/lessonController';
 
 const router = Router();
@@ -19,6 +20,7 @@ router.get('/health', healthCheck);
 router.post('/api/generate', generateLesson);
 router.post('/api/generate/stream', streamGenerateLesson);
 router.post('/api/regenerate-section', regenerateSection);
+router.post('/api/embedding', createEmbedding);
 
 // 知识图谱
 router.post('/api/build-graph', buildGraph);

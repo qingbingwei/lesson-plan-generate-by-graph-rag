@@ -18,7 +18,7 @@ import (
 
 // GenerationService 生成服务接口
 type GenerationService interface {
-	Generate(ctx context.Context, userID uuid.UUID, req *model.GenerationRequest) (*model.GenerationResponse, error)
+	Generate(ctx context.Context, userID uuid.UUID, req *model.GenerationRequest, keyOverride APIKeyOverride) (*model.GenerationResponse, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Generation, error)
 	ListByUser(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.Generation, int64, error)
 	GetStats(ctx context.Context, userID uuid.UUID) (*repository.GenerationStats, error)
@@ -48,7 +48,7 @@ func NewGenerationService(
 	}
 }
 
-func (s *generationService) Generate(ctx context.Context, userID uuid.UUID, req *model.GenerationRequest) (*model.GenerationResponse, error) {
+func (s *generationService) Generate(ctx context.Context, userID uuid.UUID, req *model.GenerationRequest, keyOverride APIKeyOverride) (*model.GenerationResponse, error) {
 	prompt := s.buildPrompt(req)
 	paramsJSON, _ := json.Marshal(req)
 
@@ -65,7 +65,7 @@ func (s *generationService) Generate(ctx context.Context, userID uuid.UUID, req 
 
 	_ = s.generationRepo.UpdateStatus(ctx, generation.ID, model.GenerationStatusProcessing)
 
-	agentResp, err := s.callAgent(ctx, userID, req)
+	agentResp, err := s.callAgent(ctx, userID, req, keyOverride)
 	if err != nil {
 		_ = s.generationRepo.UpdateError(ctx, generation.ID, err.Error())
 		return &model.GenerationResponse{
@@ -74,16 +74,16 @@ func (s *generationService) Generate(ctx context.Context, userID uuid.UUID, req 
 			ErrorMessage: err.Error(),
 		}, nil
 	}
-
 	tokenCount := 0
 	if agentResp.Usage != nil {
 		tokenCount = agentResp.Usage.TotalTokens
+		if tokenCount == 0 {
+			tokenCount = agentResp.Usage.PromptTokens + agentResp.Usage.CompletionTokens
+		}
 	}
 
-	cost := float64(tokenCount) * 0.001
-
 	resultJSON, _ := json.Marshal(agentResp.Data)
-	if err := s.generationRepo.UpdateResult(ctx, generation.ID, string(resultJSON), tokenCount, cost); err != nil {
+	if err := s.generationRepo.UpdateResult(ctx, generation.ID, string(resultJSON), tokenCount); err != nil {
 		return nil, err
 	}
 
@@ -163,7 +163,7 @@ func (s *generationService) buildPrompt(req *model.GenerationRequest) string {
 	return prompt
 }
 
-func (s *generationService) callAgent(ctx context.Context, userID uuid.UUID, req *model.GenerationRequest) (*AgentResponse, error) {
+func (s *generationService) callAgent(ctx context.Context, userID uuid.UUID, req *model.GenerationRequest, keyOverride APIKeyOverride) (*AgentResponse, error) {
 	agentReq := &AgentRequest{
 		Subject:    req.Subject,
 		Grade:      req.Grade,
@@ -188,6 +188,12 @@ func (s *generationService) callAgent(ctx context.Context, userID uuid.UUID, req
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+	if keyOverride.GenerationAPIKey != "" {
+		httpReq.Header.Set(HeaderGenerationAPIKey, keyOverride.GenerationAPIKey)
+	}
+	if keyOverride.EmbeddingAPIKey != "" {
+		httpReq.Header.Set(HeaderEmbeddingAPIKey, keyOverride.EmbeddingAPIKey)
+	}
 	if s.cfg.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
 	}

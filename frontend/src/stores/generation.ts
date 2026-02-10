@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { GenerateLessonRequest, GeneratedLesson, GenerationProgress } from '@/types';
 import * as generationApi from '@/api/generation';
+import { getApiKeyHeaders } from '@/utils/apiKeys';
 
 // --- 共享解析工具 ---
 
@@ -138,6 +139,7 @@ export const useGenerationStore = defineStore('generation', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getApiKeyHeaders(),
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(request),

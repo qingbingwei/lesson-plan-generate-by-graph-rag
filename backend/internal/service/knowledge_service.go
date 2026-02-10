@@ -105,6 +105,13 @@ func (s *knowledgeService) GetEmbedding(ctx context.Context, text string) ([]flo
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+	override := APIKeyOverrideFromContext(ctx)
+	if override.GenerationAPIKey != "" {
+		httpReq.Header.Set(HeaderGenerationAPIKey, override.GenerationAPIKey)
+	}
+	if override.EmbeddingAPIKey != "" {
+		httpReq.Header.Set(HeaderEmbeddingAPIKey, override.EmbeddingAPIKey)
+	}
 	if s.cfg.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
 	}

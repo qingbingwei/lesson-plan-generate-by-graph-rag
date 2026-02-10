@@ -158,7 +158,6 @@ CREATE TABLE IF NOT EXISTS generation_logs (
     -- 性能指标
     duration_ms INTEGER,
     token_count INTEGER,
-    cost DECIMAL(10, 4),
     
     -- 时间戳
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -180,7 +179,6 @@ CREATE TABLE IF NOT EXISTS generations (
     result TEXT,
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     token_count INTEGER DEFAULT 0,
-    cost DECIMAL(10, 4) DEFAULT 0,
     duration_ms BIGINT DEFAULT 0,
     error_msg TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -5,6 +5,7 @@ import type {
   KnowledgeGraphData,
   ApiResponse,
 } from '@/types';
+import { getApiKeyHeaders } from '@/utils/apiKeys';
 
 // 后端返回的生成响应结构
 interface BackendGenerationResponse {
@@ -62,6 +63,7 @@ export function streamGenerateLesson(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...getApiKeyHeaders(),
     },
     body: JSON.stringify(request),
     signal: controller.signal,
@@ -177,7 +179,6 @@ export interface DashboardStats {
   completed_count: number;
   failed_count: number;
   total_tokens: number;
-  total_cost: number;
   avg_duration_ms: number;
   this_month_generations: number;
   total_lessons: number;
@@ -189,4 +190,54 @@ export interface DashboardStats {
 export async function getGenerationStats(): Promise<DashboardStats> {
   const response = await api.get<ApiResponse<DashboardStats>>('/generate/stats');
   return response.data.data;
+}
+
+
+export interface GenerationHistoryItem {
+  id: string;
+  status: string;
+  prompt: string;
+  token_count: number;
+  duration_ms: number;
+  error_msg?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface GenerationHistoryResponse {
+  items: GenerationHistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * 获取生成历史（含 token 使用量）
+ */
+export async function getGenerationHistory(page: number = 1, pageSize: number = 10): Promise<GenerationHistoryResponse> {
+  const response = await api.get<ApiResponse<Record<string, unknown>>>('/generate/history', {
+    params: {
+      page,
+      page_size: pageSize,
+    },
+  });
+
+  const data = response.data.data as {
+    items?: GenerationHistoryItem[];
+    total?: number;
+    page?: number;
+    page_size?: number;
+    pageSize?: number;
+    total_pages?: number;
+    totalPages?: number;
+  };
+
+  return {
+    items: data.items || [],
+    total: data.total || 0,
+    page: data.page || page,
+    pageSize: data.page_size || data.pageSize || pageSize,
+    totalPages: data.total_pages || data.totalPages || 1,
+  };
 }

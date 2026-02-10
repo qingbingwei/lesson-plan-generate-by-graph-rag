@@ -14,7 +14,7 @@ type GenerationRepository interface {
 	Create(ctx context.Context, generation *model.Generation) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Generation, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
-	UpdateResult(ctx context.Context, id uuid.UUID, result string, tokenCount int, cost float64) error
+	UpdateResult(ctx context.Context, id uuid.UUID, result string, tokenCount int) error
 	UpdateError(ctx context.Context, id uuid.UUID, errorMsg string) error
 	ListByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.Generation, int64, error)
 	GetStats(ctx context.Context, userID uuid.UUID) (*GenerationStats, error)
@@ -26,7 +26,6 @@ type GenerationStats struct {
 	CompletedCount       int64   `json:"completed_count"`
 	FailedCount          int64   `json:"failed_count"`
 	TotalTokens          int64   `json:"total_tokens"`
-	TotalCost            float64 `json:"total_cost"`
 	AvgDurationMs        float64 `json:"avg_duration_ms"`
 	ThisMonthGenerations int64   `json:"this_month_generations"`
 	TotalLessons         int64   `json:"total_lessons"`
@@ -59,15 +58,13 @@ func (r *generationRepository) UpdateStatus(ctx context.Context, id uuid.UUID, s
 		Update("status", status).Error
 }
 
-func (r *generationRepository) UpdateResult(ctx context.Context, id uuid.UUID, result string, tokenCount int, cost float64) error {
+func (r *generationRepository) UpdateResult(ctx context.Context, id uuid.UUID, result string, tokenCount int) error {
 	return r.db.WithContext(ctx).Model(&model.Generation{}).Where("id = ?", id).
 		Updates(map[string]interface{}{
-			"result":       result,
-			"token_count":  tokenCount,
-			"cost":         cost,
-			"completed_at": gorm.Expr("NOW()"),
-			"duration_ms":  gorm.Expr("EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000"),
-			"status":       model.GenerationStatusCompleted,
+			"result":      result,
+			"token_count": tokenCount, "completed_at": gorm.Expr("NOW()"),
+			"duration_ms": gorm.Expr("EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000"),
+			"status":      model.GenerationStatusCompleted,
 		}).Error
 }
 
@@ -110,7 +107,6 @@ func (r *generationRepository) GetStats(ctx context.Context, userID uuid.UUID) (
 			COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
 			COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_count,
 			COALESCE(SUM(token_count), 0) as total_tokens,
-			COALESCE(SUM(cost), 0) as total_cost,
 			COALESCE(AVG(duration_ms), 0) as avg_duration_ms,
 			COUNT(CASE WHEN created_at >= date_trunc('month', CURRENT_DATE) THEN 1 END) as this_month_generations
 		`).

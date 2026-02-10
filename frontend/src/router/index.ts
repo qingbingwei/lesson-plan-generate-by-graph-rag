@@ -77,6 +77,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Profile.vue'),
         meta: { title: '个人中心' },
       },
+      {
+        path: 'token-usage',
+        name: 'TokenUsage',
+        component: () => import('@/views/TokenUsage.vue'),
+        meta: { title: 'Token与密钥' },
+      },
     ],
   },
   {

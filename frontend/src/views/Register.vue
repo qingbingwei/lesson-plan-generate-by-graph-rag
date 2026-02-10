@@ -49,8 +49,7 @@ async function handleSubmit() {
   <div class="min-h-screen flex items-center justify-center px-4 py-10">
     <el-card class="surface-card w-full max-w-md" shadow="never">
       <div class="text-center mb-8">
-        <div class="text-xs font-semibold tracking-[0.2em] uppercase text-primary-600">Hero Classroom</div>
-        <h1 class="mt-2 text-3xl font-bold app-text-primary">创建账户</h1>
+        <h1 class="text-3xl font-bold app-text-primary">创建账户</h1>
         <p class="mt-2 text-sm app-text-muted">开启智能备课体验</p>
       </div>
 

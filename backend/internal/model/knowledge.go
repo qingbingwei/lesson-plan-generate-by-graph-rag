@@ -88,7 +88,6 @@ type Generation struct {
 	Result      string     `gorm:"type:text" json:"result"`
 	Status      string     `gorm:"size:20;default:'pending';index" json:"status"`
 	TokenCount  int        `gorm:"default:0" json:"token_count"`
-	Cost        float64    `gorm:"default:0" json:"cost"`
 	DurationMs  int64      `gorm:"default:0" json:"duration_ms"`
 	ErrorMsg    string     `gorm:"type:text" json:"error_msg,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`

@@ -17,6 +17,7 @@ import {
   Moon,
   Fold,
   Expand,
+  Key,
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -40,6 +41,7 @@ const menuItems = [
   { name: '知识图谱', path: '/knowledge', icon: Share },
   { name: '知识库管理', path: '/knowledge/upload', icon: Upload },
   { name: '我的收藏', path: '/favorites', icon: Star },
+  { name: 'Token与密钥', path: '/token-usage', icon: Key },
 ];
 
 const activeMenu = computed(() => {
@@ -131,7 +133,7 @@ onMounted(() => {
           >
             <div v-if="!desktopSidebarCollapsed" class="min-w-0">
               <div class="text-lg font-semibold app-text-primary truncate">智能教案生成系统</div>
-                </div>
+            </div>
 
             <el-tooltip :content="desktopSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'" placement="right">
               <el-button

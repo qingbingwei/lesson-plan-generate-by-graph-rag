@@ -45,7 +45,11 @@ func (h *GenerationHandler) Generate(c *gin.Context) {
 	}
 
 	userUUID, _ := uuid.Parse(userID)
-	resp, err := h.generationService.Generate(c.Request.Context(), userUUID, &req)
+	keyOverride := service.NewAPIKeyOverride(
+		c.GetHeader(service.HeaderGenerationAPIKey),
+		c.GetHeader(service.HeaderEmbeddingAPIKey),
+	)
+	resp, err := h.generationService.Generate(c.Request.Context(), userUUID, &req, keyOverride)
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "生成失败", err.Error())
 		return
@@ -118,7 +122,12 @@ func (h *GenerationHandler) SearchKnowledge(c *gin.Context) {
 	}
 
 	limit := 10
-	results, err := h.knowledgeService.Search(c.Request.Context(), query, limit)
+	keyOverride := service.NewAPIKeyOverride(
+		c.GetHeader(service.HeaderGenerationAPIKey),
+		c.GetHeader(service.HeaderEmbeddingAPIKey),
+	)
+	ctx := service.WithAPIKeyOverride(c.Request.Context(), keyOverride)
+	results, err := h.knowledgeService.Search(ctx, query, limit)
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "搜索失败", err.Error())
 		return

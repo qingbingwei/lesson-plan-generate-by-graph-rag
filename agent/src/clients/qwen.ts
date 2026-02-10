@@ -1,5 +1,6 @@
 import logger from '../utils/logger';
 import config from '../config';
+import { getRequestApiKeys } from '../context/requestApiKeys';
 
 /**
  * 千问 API 客户端
@@ -24,14 +25,19 @@ class QwenClient {
    * 生成 Embedding
    * 使用千问 text-embedding-v4 模型
    */
-  async createEmbedding(text: string): Promise<number[]> {
+  async createEmbedding(text: string, overrideApiKey?: string): Promise<number[]> {
     try {
       logger.debug('Creating embedding with Qwen', { textLength: text.length });
+
+      const runtimeApiKey = (overrideApiKey || getRequestApiKeys().embeddingApiKey || this.apiKey || '').trim();
+      if (!runtimeApiKey) {
+        throw new Error('QWEN_API_KEY is not set');
+      }
 
       const response = await fetch(this.embeddingUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${runtimeApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -61,14 +67,19 @@ class QwenClient {
    * 批量生成 Embedding
    * 使用千问 text-embedding-v4 模型
    */
-  async createEmbeddings(texts: string[]): Promise<number[][]> {
+  async createEmbeddings(texts: string[], overrideApiKey?: string): Promise<number[][]> {
     try {
       logger.debug('Creating batch embeddings with Qwen', { count: texts.length });
+
+      const runtimeApiKey = (overrideApiKey || getRequestApiKeys().embeddingApiKey || this.apiKey || '').trim();
+      if (!runtimeApiKey) {
+        throw new Error('QWEN_API_KEY is not set');
+      }
 
       const response = await fetch(this.embeddingUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${runtimeApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

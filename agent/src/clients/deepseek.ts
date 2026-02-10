@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import config from '../config';
 import logger from '../utils/logger';
 import { getQwenClient } from './qwen';
+import { getRequestApiKeys } from '../context/requestApiKeys';
 import type { DeepSeekMessage, TokenUsage } from '../types';
 
 /**
@@ -45,7 +46,15 @@ class DeepSeekClient {
         temperature: options?.temperature ?? this.temperature,
       });
 
-      const response = await this.client.chat.completions.create({
+      const { generationApiKey } = getRequestApiKeys();
+      const runtimeClient = generationApiKey
+        ? new OpenAI({
+            apiKey: generationApiKey,
+            baseURL: config.deepseek.baseUrl,
+          })
+        : this.client;
+
+      const response = await runtimeClient.chat.completions.create({
         model: this.model,
         messages: messages.map(m => ({
           role: m.role,
@@ -80,7 +89,8 @@ class DeepSeekClient {
    * 委托给千问客户端
    */
   async createEmbedding(text: string): Promise<number[]> {
-    return this.qwenClient.createEmbedding(text);
+    const { embeddingApiKey } = getRequestApiKeys();
+    return this.qwenClient.createEmbedding(text, embeddingApiKey);
   }
 
   /**
@@ -88,7 +98,8 @@ class DeepSeekClient {
    * 委托给千问客户端
    */
   async createEmbeddings(texts: string[]): Promise<number[][]> {
-    return this.qwenClient.createEmbeddings(texts);
+    const { embeddingApiKey } = getRequestApiKeys();
+    return this.qwenClient.createEmbeddings(texts, embeddingApiKey);
   }
 
   /**
