@@ -297,6 +297,55 @@ func normalizeGraphScope(scope string) string {
 	}
 }
 
+func normalizeGraphNodeType(raw string) string {
+	normalized := strings.TrimSpace(raw)
+	if normalized == "" {
+		return "KnowledgePoint"
+	}
+
+	canonical := map[string]string{
+		"Subject":        "Subject",
+		"Chapter":        "Chapter",
+		"KnowledgePoint": "KnowledgePoint",
+		"Skill":          "Skill",
+		"Concept":        "Concept",
+		"Principle":      "Principle",
+		"Formula":        "Formula",
+		"Example":        "Example",
+	}
+	if value, ok := canonical[normalized]; ok {
+		return value
+	}
+
+	aliases := map[string]string{
+		"subject":         "Subject",
+		"学科":              "Subject",
+		"chapter":         "Chapter",
+		"章节":              "Chapter",
+		"知识点":             "KnowledgePoint",
+		"knowledge":       "KnowledgePoint",
+		"knowledgepoint":  "KnowledgePoint",
+		"knowledge_point": "KnowledgePoint",
+		"skill":           "Skill",
+		"技能":              "Skill",
+		"concept":         "Concept",
+		"概念":              "Concept",
+		"principle":       "Principle",
+		"原理":              "Principle",
+		"formula":         "Formula",
+		"公式":              "Formula",
+		"example":         "Example",
+		"示例":              "Example",
+		"例题":              "Example",
+	}
+
+	if mapped, ok := aliases[strings.ToLower(normalized)]; ok {
+		return mapped
+	}
+
+	return "KnowledgePoint"
+}
+
 func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, topic, scope, userId string, limit int) (*model.KnowledgeGraph, error) {
 	session := r.session(ctx)
 	defer session.Close(ctx)
@@ -397,8 +446,9 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, topi
 		}
 
 		graph := &model.KnowledgeGraph{
-			Nodes: []model.KnowledgeNode{},
-			Edges: []model.KnowledgeEdge{},
+			Nodes:      []model.KnowledgeNode{},
+			Edges:      []model.KnowledgeEdge{},
+			TypeCounts: map[string]int{},
 		}
 
 		edgeMap := make(map[string]bool)
@@ -436,6 +486,7 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, topi
 			if t, ok := props["type"].(string); ok && t != "" {
 				nodeType = t
 			}
+			nodeType = normalizeGraphNodeType(nodeType)
 
 			nodeDifficulty := "medium"
 			if d, ok := props["difficulty"].(string); ok && d != "" {
@@ -461,6 +512,8 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, topi
 				Difficulty: nodeDifficulty,
 				Importance: nodeImportance,
 			})
+
+			graph.TypeCounts[nodeType]++
 
 			relations, _ := records.Record().Get("relations")
 			if rels, ok := relations.([]interface{}); ok {
@@ -501,6 +554,8 @@ func (r *knowledgeRepository) GetGraph(ctx context.Context, subject, grade, topi
 			}
 		}
 		graph.Edges = filteredEdges
+		graph.TotalNodes = len(graph.Nodes)
+		graph.TotalEdges = len(graph.Edges)
 
 		return graph, nil
 	})

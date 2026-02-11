@@ -178,8 +178,10 @@ export type KnowledgeNodeType =
   | 'Chapter' 
   | 'KnowledgePoint' 
   | 'Skill' 
-  | 'Resource' 
-  | 'Lesson';
+  | 'Concept'
+  | 'Principle'
+  | 'Formula'
+  | 'Example';
 
 export interface KnowledgeLink {
   source: string;

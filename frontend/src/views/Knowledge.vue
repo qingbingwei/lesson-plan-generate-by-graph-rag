@@ -36,6 +36,9 @@ interface GraphApiResponse {
     type: string;
     weight: number;
   }>;
+  typeCounts?: Record<string, number>;
+  totalNodes?: number;
+  totalEdges?: number;
 }
 
 const svgRef = ref<SVGSVGElement | null>(null);
@@ -78,6 +81,26 @@ const graphData = ref<{
   nodes: [],
   links: [],
 });
+const graphTypeCounts = ref<Record<string, number>>({});
+const canonicalTypeOrder = [
+  'Subject',
+  'Chapter',
+  'KnowledgePoint',
+  'Skill',
+  'Concept',
+  'Principle',
+  'Formula',
+  'Example',
+] as const;
+
+const displayedTypeStats = computed(() =>
+  canonicalTypeOrder.map((type) => ({
+    type,
+    count: graphTypeCounts.value[type] || 0,
+    label: getNodeTypeName(type),
+    color: getNodeColor(type),
+  }))
+);
 
 const knowledgePoints = ref<KnowledgePoint[]>([]);
 const debouncedSearch = useDebounceFn(() => {
@@ -124,8 +147,6 @@ function getNodeColor(type: string): string {
     Principle: '#ec4899',
     Formula: '#f97316',
     Example: '#64748b',
-    Resource: '#ec4899',
-    Lesson: '#6366f1',
   };
   return colors[type] || '#6b7280';
 }
@@ -140,8 +161,6 @@ function getNodeTypeName(type: string): string {
     Principle: '原理',
     Formula: '公式',
     Example: '示例',
-    Resource: '资源',
-    Lesson: '课程',
   };
   return names[type] || type || '其他';
 }
@@ -170,88 +189,83 @@ function zoomReset() {
 }
 
 
-function matchesKeyword(node: GraphApiResponse['nodes'][number], keyword: string): boolean {
-  const normalizedKeyword = keyword.trim().toLowerCase();
-  if (!normalizedKeyword) {
-    return true;
+function normalizeNodeType(type: string | undefined): string {
+  const rawType = (type || '').trim();
+  if (!rawType) {
+    return 'KnowledgePoint';
   }
 
-  const keywordTexts = [
-    node.label,
-    node.description || '',
-    ...(node.keywords || []).map((item) => String(item)),
-  ];
+  const canonicalTypes = new Set([
+    'Subject',
+    'Chapter',
+    'KnowledgePoint',
+    'Skill',
+    'Concept',
+    'Principle',
+    'Formula',
+    'Example',
+  ]);
 
-  return keywordTexts.some((text) => text.toLowerCase().includes(normalizedKeyword));
+  if (canonicalTypes.has(rawType)) {
+    return rawType;
+  }
+
+  const aliases: Record<string, string> = {
+    '学科': 'Subject',
+    subject: 'Subject',
+    '章节': 'Chapter',
+    chapter: 'Chapter',
+    '知识点': 'KnowledgePoint',
+    knowledge: 'KnowledgePoint',
+    knowledgepoint: 'KnowledgePoint',
+    knowledge_point: 'KnowledgePoint',
+    '技能': 'Skill',
+    skill: 'Skill',
+    '概念': 'Concept',
+    concept: 'Concept',
+    '原理': 'Principle',
+    principle: 'Principle',
+    '公式': 'Formula',
+    formula: 'Formula',
+    '示例': 'Example',
+    '例题': 'Example',
+    example: 'Example',
+  };
+
+  return aliases[rawType.toLowerCase()] || aliases[rawType] || 'KnowledgePoint';
 }
 
-function filterGraphByTopicScope(
-  nodes: GraphApiResponse['nodes'],
-  edges: GraphApiResponse['edges'],
-  topic: string,
-  scope: GraphScope,
-): { nodes: GraphApiResponse['nodes']; edges: GraphApiResponse['edges'] } {
-  const normalizedTopic = topic.trim().toLowerCase();
-  if (!normalizedTopic) {
-    return { nodes, edges };
+function buildTypeCountsFromNodes(nodes: Array<{ type: string }>): Record<string, number> {
+  return nodes.reduce<Record<string, number>>((acc, node) => {
+    const normalizedType = normalizeNodeType(node.type);
+    acc[normalizedType] = (acc[normalizedType] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function normalizeTypeCounts(typeCounts: Record<string, number> | undefined): Record<string, number> {
+  if (!typeCounts) {
+    return {};
   }
 
-  const matchedIds = new Set(
-    nodes
-      .filter((node) => matchesKeyword(node, normalizedTopic))
-      .map((node) => node.id)
-  );
+  return Object.entries(typeCounts).reduce<Record<string, number>>((acc, [rawType, rawCount]) => {
+    const normalizedType = normalizeNodeType(rawType);
+    const count = Number(rawCount);
 
-  if (matchedIds.size === 0) {
-    return { nodes: [], edges: [] };
-  }
-
-  const maxDepth = scope === 'matched' ? 0 : scope === 'two_hop' ? 2 : 1;
-  const keptIds = new Set(matchedIds);
-
-  if (maxDepth > 0) {
-    const adjacency = new Map<string, Set<string>>();
-    edges.forEach((edge) => {
-      if (!adjacency.has(edge.source)) adjacency.set(edge.source, new Set());
-      if (!adjacency.has(edge.target)) adjacency.set(edge.target, new Set());
-      adjacency.get(edge.source)!.add(edge.target);
-      adjacency.get(edge.target)!.add(edge.source);
-    });
-
-    const queue: Array<{ id: string; depth: number }> = Array.from(matchedIds).map((id) => ({ id, depth: 0 }));
-
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current || current.depth >= maxDepth) {
-        continue;
-      }
-
-      const neighbors = adjacency.get(current.id);
-      if (!neighbors) {
-        continue;
-      }
-
-      neighbors.forEach((neighborId) => {
-        if (keptIds.has(neighborId)) {
-          return;
-        }
-
-        keptIds.add(neighborId);
-        queue.push({ id: neighborId, depth: current.depth + 1 });
-      });
+    if (!Number.isFinite(count) || count <= 0) {
+      return acc;
     }
-  }
 
-  return {
-    nodes: nodes.filter((node) => keptIds.has(node.id)),
-    edges: edges.filter((edge) => keptIds.has(edge.source) && keptIds.has(edge.target)),
-  };
+    acc[normalizedType] = (acc[normalizedType] || 0) + Math.round(count);
+    return acc;
+  }, {});
 }
 
 async function loadKnowledgeGraph() {
   const requestSeq = ++graphRequestSeq;
   loading.value = true;
   graphData.value = { nodes: [], links: [] };
+  graphTypeCounts.value = {};
   knowledgePoints.value = [];
   selectedNode.value = null;
 
@@ -278,23 +292,25 @@ async function loadKnowledgeGraph() {
       return;
     }
 
-    const data = response.data.data;
-    const apiNodes = data?.nodes || [];
-    const apiEdges = data?.edges || [];
-    const filteredGraph = filterGraphByTopicScope(apiNodes, apiEdges, topic, filters.value.scope);
+    const data = response.data.data || { nodes: [], edges: [] };
+    const apiNodes = data.nodes || [];
+    const apiEdges = data.edges || [];
 
-    graphData.value.nodes = filteredGraph.nodes.map((node) => ({
-      id: node.id,
-      name: node.label,
-      type: node.type as KnowledgeNodeType,
-      properties: {
-        subject: node.subject,
-        grade: node.grade,
-      },
-    }));
+    graphData.value.nodes = apiNodes.map((node) => {
+      const normalizedType = normalizeNodeType(node.type);
+      return {
+        id: node.id,
+        name: node.label,
+        type: normalizedType as KnowledgeNodeType,
+        properties: {
+          subject: node.subject,
+          grade: node.grade,
+        },
+      };
+    });
 
-    const nodeIdSet = new Set(filteredGraph.nodes.map((node) => node.id));
-    graphData.value.links = filteredGraph.edges
+    const nodeIdSet = new Set(graphData.value.nodes.map((node) => node.id));
+    graphData.value.links = apiEdges
       .filter((edge) => nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target))
       .map((edge) => ({
         source: edge.source,
@@ -305,15 +321,23 @@ async function loadKnowledgeGraph() {
         },
       }));
 
-    knowledgePoints.value = filteredGraph.nodes.map((node) => ({
-      id: node.id,
-      name: node.label,
-      description: `${getNodeTypeName(node.type)} - ${node.grade || '通用'}`,
-      difficulty: node.difficulty || 'medium',
-      grade: node.grade || '',
-      importance: Math.round((node.importance || 0.5) * 5),
-      content: '',
-    }));
+    knowledgePoints.value = apiNodes.map((node) => {
+      const normalizedType = normalizeNodeType(node.type);
+      return {
+        id: node.id,
+        name: node.label,
+        description: `${getNodeTypeName(normalizedType)} - ${node.grade || '通用'}`,
+        difficulty: node.difficulty || 'medium',
+        grade: node.grade || '',
+        importance: Math.round((node.importance || 0.5) * 5),
+        content: '',
+      };
+    });
+
+    const typeCountsFromApi = normalizeTypeCounts(data.typeCounts);
+    graphTypeCounts.value = Object.keys(typeCountsFromApi).length > 0
+      ? typeCountsFromApi
+      : buildTypeCountsFromNodes(apiNodes.map((node) => ({ type: normalizeNodeType(node.type) })));
 
     await nextTick();
     renderGraph();
@@ -730,32 +754,40 @@ onUnmounted(() => {
 
     <el-card class="surface-card flex-1 min-h-[360px]" shadow="never">
       <template #header>
-        <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="flex items-center gap-2">
-            <el-button
-              v-if="isMobile"
-              circle
-              :icon="showSidebar ? ArrowLeftBold : ArrowRightBold"
-              @click="showSidebar = !showSidebar"
-            />
-            <span class="font-semibold">知识图谱</span>
-          </div>
-
-          <div class="flex items-center gap-2 flex-wrap">
-            <div class="graph-legend hidden md:flex items-center gap-2 flex-wrap">
-              <span class="legend-item"><span class="legend-dot" style="background:#3b82f6" />学科</span>
-              <span class="legend-item"><span class="legend-dot" style="background:#8b5cf6" />章节</span>
-              <span class="legend-item"><span class="legend-dot" style="background:#10b981" />知识点</span>
-              <span class="legend-item"><span class="legend-dot" style="background:#f59e0b" />技能</span>
-              <span class="legend-item"><span class="legend-dot" style="background:#06b6d4" />概念</span>
-              <span class="legend-item"><span class="legend-dot" style="background:#ec4899" />原理</span>
+        <div class="graph-header">
+          <div class="graph-header-top">
+            <div class="graph-header-title">
+              <el-button
+                v-if="isMobile"
+                circle
+                :icon="showSidebar ? ArrowLeftBold : ArrowRightBold"
+                @click="showSidebar = !showSidebar"
+              />
+              <span class="graph-title">知识图谱</span>
+              <el-tag size="small" effect="plain" class="graph-summary-tag">
+                节点 {{ graphData.nodes.length }} · 关系 {{ graphData.links.length }}
+              </el-tag>
             </div>
 
-            <el-button-group>
+            <el-button-group class="graph-zoom-tools">
               <el-button :icon="Plus" @click="zoomIn" />
               <el-button :icon="RefreshRight" @click="zoomReset" />
               <el-button :icon="Minus" @click="zoomOut" />
             </el-button-group>
+          </div>
+
+          <div class="graph-legend-row">
+            <span v-if="graphData.nodes.length === 0" class="legend-empty">暂无节点</span>
+            <div v-else class="graph-legend-wrap">
+              <span
+                v-for="item in displayedTypeStats"
+                :key="item.type"
+                class="legend-item"
+              >
+                <span class="legend-dot" :style="{ background: item.color }" />
+                {{ item.label }} · {{ item.count }}
+              </span>
+            </div>
           </div>
         </div>
       </template>
@@ -791,6 +823,64 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.graph-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.graph-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.graph-header-title {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.graph-title {
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--app-text-primary);
+}
+
+.graph-summary-tag {
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.graph-zoom-tools {
+  flex-shrink: 0;
+}
+
+.graph-legend-row {
+  min-height: 24px;
+}
+
+.graph-legend-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.graph-legend-wrap::-webkit-scrollbar {
+  height: 6px;
+}
+
+.graph-legend-wrap::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--el-border-color) 70%, transparent);
+}
+
 .graph-canvas {
   background: #f8fafc;
 }
@@ -800,20 +890,47 @@ onUnmounted(() => {
 }
 
 .legend-item {
-  display: inline-flex;
+  display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--el-fill-color-light) 70%, transparent);
   font-size: 12px;
   color: #64748b;
+}
+
+.legend-empty {
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 :global(.dark) .legend-item {
   color: #cbd5e1;
 }
 
+:global(.dark) .legend-empty {
+  color: #94a3b8;
+}
+
 .legend-dot {
   width: 8px;
   height: 8px;
   border-radius: 9999px;
+}
+
+@media (max-width: 1023px) {
+  .graph-header-top {
+    flex-wrap: wrap;
+  }
+
+  .graph-title {
+    font-size: 17px;
+  }
+
+  .graph-legend-row {
+    margin-right: -2px;
+  }
 }
 </style>

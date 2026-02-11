@@ -46,8 +46,11 @@ const (
 
 // KnowledgeGraph 知识图谱
 type KnowledgeGraph struct {
-	Nodes []KnowledgeNode `json:"nodes"`
-	Edges []KnowledgeEdge `json:"edges"`
+	Nodes      []KnowledgeNode `json:"nodes"`
+	Edges      []KnowledgeEdge `json:"edges"`
+	TypeCounts map[string]int  `json:"typeCounts"`
+	TotalNodes int             `json:"totalNodes"`
+	TotalEdges int             `json:"totalEdges"`
 }
 
 // KnowledgeNode 知识图谱节点
