@@ -96,6 +96,20 @@ docker compose up -d postgres neo4j redis
 - Agent 与启动脚本统一读取根目录 `.env`，`AGENT_PORT` 为主，`PORT` 仅兼容保留。
 - Qwen Embedding 配置同样统一放在根目录 `.env`，不要再在 `agent/.env` 里单独维护。
 
+### LangSmith 可视化分析
+
+Agent 已支持 LangSmith tracing（LangGraph/LangChain 运行轨迹可视化）：
+
+- `LANGSMITH_TRACING=true`
+- `LANGSMITH_API_KEY=...`
+- `LANGSMITH_ENDPOINT=https://api.smith.langchain.com`
+- `LANGSMITH_PROJECT=lesson-plan-agent`
+
+说明：
+- 当 `LANGSMITH_TRACING=true` 且 `LANGSMITH_API_KEY` 有值时，Agent 会自动开启 tracing。
+- 教案生成调用会带上 `runName/tags/metadata`，便于在 LangSmith 中筛选与分析。
+- 若开启 tracing 但未配置 API Key，服务会打印告警并自动关闭 tracing，避免影响主流程。
+
 ## 常用命令
 
 ```bash

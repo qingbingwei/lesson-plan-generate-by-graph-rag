@@ -4,6 +4,15 @@ import path from 'path';
 const rootEnvPath = path.resolve(__dirname, '../../../.env');
 dotenv.config({ path: rootEnvPath });
 
+function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(normalized);
+}
+
 export interface Config {
   env: string;
   port: number;
@@ -27,13 +36,12 @@ export interface Config {
     username: string;
     password: string;
   };
-  
-  redis: {
-    url: string;
-  };
-  
-  backend: {
-    url: string;
+
+  langsmith: {
+    enabled: boolean;
+    apiKey: string;
+    endpoint: string;
+    project: string;
   };
   
   log: {
@@ -73,13 +81,18 @@ const config: Config = {
     username: process.env.NEO4J_USERNAME || 'neo4j',
     password: process.env.NEO4J_PASSWORD || 'password',
   },
-  
-  redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-  },
-  
-  backend: {
-    url: process.env.BACKEND_URL || 'http://localhost:8080',
+
+  langsmith: {
+    enabled: parseBoolean(
+      process.env.LANGSMITH_TRACING || process.env.LANGCHAIN_TRACING_V2,
+      false
+    ),
+    apiKey: process.env.LANGSMITH_API_KEY || '',
+    endpoint: process.env.LANGSMITH_ENDPOINT || 'https://api.smith.langchain.com',
+    project:
+      process.env.LANGSMITH_PROJECT ||
+      process.env.LANGCHAIN_PROJECT ||
+      'lesson-plan-agent',
   },
   
   log: {
@@ -95,5 +108,28 @@ const config: Config = {
     embeddingDimension: parseInt(process.env.EMBEDDING_DIMENSION || '1536', 10),
   },
 };
+
+function applyLangSmithRuntimeEnv(currentConfig: Config) {
+  if (!currentConfig.langsmith.enabled) {
+    process.env.LANGSMITH_TRACING = process.env.LANGSMITH_TRACING || 'false';
+    process.env.LANGCHAIN_TRACING_V2 = process.env.LANGCHAIN_TRACING_V2 || 'false';
+    return;
+  }
+
+  if (!currentConfig.langsmith.apiKey) {
+    process.env.LANGSMITH_TRACING = 'false';
+    process.env.LANGCHAIN_TRACING_V2 = 'false';
+    return;
+  }
+
+  process.env.LANGSMITH_TRACING = 'true';
+  process.env.LANGCHAIN_TRACING_V2 = 'true';
+  process.env.LANGSMITH_API_KEY = currentConfig.langsmith.apiKey;
+  process.env.LANGSMITH_ENDPOINT = currentConfig.langsmith.endpoint;
+  process.env.LANGSMITH_PROJECT = currentConfig.langsmith.project;
+  process.env.LANGCHAIN_PROJECT = currentConfig.langsmith.project;
+}
+
+applyLangSmithRuntimeEnv(config);
 
 export default config;

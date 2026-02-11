@@ -1,35 +1,23 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
+import app from './app';
 import config from './config';
-import logger from './utils/logger';
-import routes from './routes';
-import { requestLogger, errorHandler } from './middleware';
+import logger from './shared/utils/logger';
 
-const app = express();
-
-// 全局中间件
-app.use(helmet());
-app.use(cors());
-app.use(compression());
-app.use(express.json({ limit: '10mb' }));
-app.use(requestLogger);
-
-// 路由
-app.use(routes);
-
-// 全局错误处理
-app.use(errorHandler);
-
-// 启动服务器
 const PORT = config.port;
 
+if (config.langsmith.enabled) {
+  if (config.langsmith.apiKey) {
+    logger.info('LangSmith tracing enabled', {
+      project: config.langsmith.project,
+      endpoint: config.langsmith.endpoint,
+    });
+  } else {
+    logger.warn('LangSmith tracing is enabled but LANGSMITH_API_KEY is missing; tracing disabled at runtime');
+  }
+}
+
 app.listen(PORT, () => {
-  logger.info(`Agent service started`, {
+  logger.info('Agent service started', {
     port: PORT,
     env: config.env,
   });
 });
-
-export default app;
