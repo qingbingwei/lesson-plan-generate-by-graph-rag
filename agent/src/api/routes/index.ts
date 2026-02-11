@@ -9,6 +9,7 @@ import {
   queryKnowledge,
   getKnowledgeSubgraph,
   createEmbedding,
+  getLangSmithTokenUsage,
 } from '../controllers/lessonController';
 
 const router = Router();
@@ -27,5 +28,6 @@ router.post('/api/build-graph', buildGraph);
 router.post('/api/delete-document-nodes', deleteDocumentNodes);
 router.get('/api/knowledge', queryKnowledge);
 router.get('/api/knowledge/:id/subgraph', getKnowledgeSubgraph);
+router.get('/api/langsmith/token-usage', getLangSmithTokenUsage);
 
 export default router;

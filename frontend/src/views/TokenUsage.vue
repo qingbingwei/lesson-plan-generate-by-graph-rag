@@ -10,8 +10,7 @@ import {
   CircleCheck,
 } from '@element-plus/icons-vue';
 import {
-  getGenerationHistory,
-  getGenerationStats,
+  getLangSmithUsage,
   type DashboardStats,
   type GenerationHistoryItem,
 } from '@/api/generation';
@@ -27,6 +26,8 @@ const historyLoading = ref(false);
 
 const stats = ref<DashboardStats | null>(null);
 const records = ref<GenerationHistoryItem[]>([]);
+const dataSource = ref('langsmith');
+const projectName = ref('');
 
 const total = ref(0);
 const page = ref(1);
@@ -98,39 +99,34 @@ function initApiKeyForm() {
   lastSavedAt.value = saved.updatedAt;
 }
 
-async function loadStats() {
+async function loadLangSmithUsage() {
   statsLoading.value = true;
-  try {
-    stats.value = await getGenerationStats();
-  } catch {
-    ElMessage.error('加载 Token 统计失败');
-  } finally {
-    statsLoading.value = false;
-  }
-}
-
-async function loadHistory() {
   historyLoading.value = true;
   try {
-    const result = await getGenerationHistory(page.value, pageSize.value);
-    records.value = result.items;
-    total.value = result.total;
-  } catch {
-    ElMessage.error('加载生成记录失败');
+    const result = await getLangSmithUsage(page.value, pageSize.value);
+    stats.value = result.stats;
+    records.value = result.history.items;
+    total.value = result.history.total;
+    dataSource.value = result.source || 'langsmith';
+    projectName.value = result.project || '';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '加载 LangSmith Token 数据失败';
+    ElMessage.error(message || '加载 LangSmith Token 数据失败');
   } finally {
+    statsLoading.value = false;
     historyLoading.value = false;
   }
 }
 
 function handlePageChange(nextPage: number) {
   page.value = nextPage;
-  loadHistory();
+  loadLangSmithUsage();
 }
 
 function handlePageSizeChange(nextPageSize: number) {
   pageSize.value = nextPageSize;
   page.value = 1;
-  loadHistory();
+  loadLangSmithUsage();
 }
 
 function saveApiKeys() {
@@ -156,8 +152,7 @@ function clearApiKeys() {
 
 onMounted(() => {
   initApiKeyForm();
-  loadStats();
-  loadHistory();
+  loadLangSmithUsage();
 });
 </script>
 
@@ -165,7 +160,7 @@ onMounted(() => {
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">Token 使用与 API Key 配置</h1>
-      <p class="page-subtitle">查看 Token 使用量，并手动配置生成与 Embedding 的 API Key</p>
+      <p class="page-subtitle">以下 Token 统计全部来自 LangSmith Trace，并支持手动配置生成与 Embedding 的 API Key</p>
     </div>
 
     <el-row :gutter="16">
@@ -253,8 +248,12 @@ onMounted(() => {
     <el-card class="surface-card" shadow="never">
       <template #header>
         <div class="flex items-center justify-between">
-          <span class="font-semibold">生成记录 Token 明细</span>
-          <el-button text :icon="RefreshRight" @click="loadHistory">刷新</el-button>
+          <div class="inline-flex items-center gap-2">
+            <span class="font-semibold">LangSmith Token 明细</span>
+            <el-tag size="small" effect="plain">{{ dataSource }}</el-tag>
+            <el-tag v-if="projectName" size="small" type="info" effect="plain">{{ projectName }}</el-tag>
+          </div>
+          <el-button text :icon="RefreshRight" @click="loadLangSmithUsage">刷新</el-button>
         </div>
       </template>
 

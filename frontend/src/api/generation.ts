@@ -212,6 +212,24 @@ export interface GenerationHistoryResponse {
   totalPages: number;
 }
 
+export interface LangSmithUsageResponse {
+  source: string;
+  project?: string;
+  stats: DashboardStats;
+  history: GenerationHistoryResponse;
+}
+
+export async function getLangSmithUsage(page: number = 1, pageSize: number = 10): Promise<LangSmithUsageResponse> {
+  const response = await api.get<ApiResponse<LangSmithUsageResponse>>('/generate/langsmith/usage', {
+    params: {
+      page,
+      page_size: pageSize,
+    },
+  });
+
+  return response.data.data;
+}
+
 /**
  * 获取生成历史（含 token 使用量）
  */

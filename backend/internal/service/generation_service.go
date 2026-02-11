@@ -22,6 +22,7 @@ type GenerationService interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Generation, error)
 	ListByUser(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.Generation, int64, error)
 	GetStats(ctx context.Context, userID uuid.UUID) (*repository.GenerationStats, error)
+	GetLangSmithUsage(ctx context.Context, userID uuid.UUID, page, pageSize int) (*LangSmithUsagePayload, error)
 }
 
 // generationService 生成服务实现
@@ -128,6 +129,70 @@ func (s *generationService) ListByUser(ctx context.Context, userID uuid.UUID, pa
 
 func (s *generationService) GetStats(ctx context.Context, userID uuid.UUID) (*repository.GenerationStats, error) {
 	return s.generationRepo.GetStats(ctx, userID)
+}
+
+func (s *generationService) GetLangSmithUsage(ctx context.Context, userID uuid.UUID, page, pageSize int) (*LangSmithUsagePayload, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	url := fmt.Sprintf("%s/api/langsmith/token-usage?userId=%s&page=%d&pageSize=%d", s.cfg.URL, userID.String(), page, pageSize)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create langsmith usage request failed: %w", err)
+	}
+
+	if s.cfg.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
+	}
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("call langsmith usage endpoint failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read langsmith usage response failed: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("langsmith usage endpoint returned error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	var agentResp struct {
+		Success bool                  `json:"success"`
+		Source  string                `json:"source"`
+		Project string                `json:"project"`
+		Stats   LangSmithUsageStats   `json:"stats"`
+		History LangSmithUsageHistory `json:"history"`
+		Error   string                `json:"error,omitempty"`
+	}
+
+	if err := json.Unmarshal(body, &agentResp); err != nil {
+		return nil, fmt.Errorf("unmarshal langsmith usage response failed: %w", err)
+	}
+
+	if !agentResp.Success {
+		if agentResp.Error != "" {
+			return nil, fmt.Errorf("langsmith usage query failed: %s", agentResp.Error)
+		}
+		return nil, fmt.Errorf("langsmith usage query failed")
+	}
+
+	return &LangSmithUsagePayload{
+		Source:  agentResp.Source,
+		Project: agentResp.Project,
+		Stats:   agentResp.Stats,
+		History: agentResp.History,
+	}, nil
 }
 
 func (s *generationService) buildPrompt(req *model.GenerationRequest) string {

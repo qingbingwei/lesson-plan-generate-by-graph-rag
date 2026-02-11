@@ -1,4 +1,7 @@
 import { Request, Response } from 'express';
+import { Client as LangSmithClient } from 'langsmith';
+import type { Run as LangSmithRun } from 'langsmith/schemas';
+import config from '../../config';
 import logger from '../../shared/utils/logger';
 import { runLessonAgent, streamLessonAgent } from '../../modules/lesson/agent/lessonAgent';
 import { runBuildGraphWorkflow, BuildGraphRequest } from '../../modules/knowledge/workflows/buildGraphWorkflow';
@@ -29,6 +32,249 @@ function resolveApiKeyOverrides(req: Request): RequestApiKeyOverrides {
   return {
     generationApiKey: generationApiKey || undefined,
     embeddingApiKey: embeddingApiKey || undefined,
+  };
+}
+
+type LangSmithHistoryItem = {
+  id: string;
+  status: string;
+  prompt: string;
+  token_count: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  duration_ms: number;
+  error_msg?: string;
+  created_at: string;
+  completed_at?: string;
+};
+
+type LangSmithUsageStats = {
+  total_count: number;
+  completed_count: number;
+  failed_count: number;
+  total_tokens: number;
+  avg_duration_ms: number;
+  this_month_generations: number;
+  total_lessons: number;
+};
+
+type LangSmithUsageResponse = {
+  success: true;
+  source: 'langsmith';
+  project: string;
+  stats: LangSmithUsageStats;
+  history: {
+    items: LangSmithHistoryItem[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+};
+
+const DEFAULT_LANGSMITH_PAGE = 1;
+const DEFAULT_LANGSMITH_PAGE_SIZE = 10;
+const MAX_LANGSMITH_PAGE_SIZE = 100;
+const MAX_LANGSMITH_FETCH_LIMIT = 5000;
+
+function parsePositiveInt(value: unknown, fallback: number, maxValue?: number): number {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  if (maxValue && parsed > maxValue) {
+    return maxValue;
+  }
+
+  return parsed;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function toTimestamp(value: string | number | undefined): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) {
+      return null;
+    }
+
+    if (value < 1e11) {
+      return Math.round(value * 1000);
+    }
+
+    return Math.round(value);
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric < 1e11 ? Math.round(numeric * 1000) : Math.round(numeric);
+  }
+
+  const parsed = Date.parse(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function toISOTime(value: string | number | undefined): string | undefined {
+  const timestamp = toTimestamp(value);
+  if (!timestamp) {
+    return undefined;
+  }
+
+  return new Date(timestamp).toISOString();
+}
+
+function extractRunUserId(run: LangSmithRun): string {
+  const extra = asObject(run.extra);
+  const invocationParams = asObject(extra?.invocation_params);
+
+  const metadataCandidates: Array<Record<string, unknown> | null> = [
+    asObject(extra?.metadata),
+    asObject(invocationParams?.metadata),
+  ];
+
+  for (const metadata of metadataCandidates) {
+    const userId = metadata?.userId;
+    if (typeof userId === 'string' && userId.trim()) {
+      return userId.trim();
+    }
+  }
+
+  const inputs = asObject(run.inputs);
+  const directUserId = inputs?.userId;
+  if (typeof directUserId === 'string' && directUserId.trim()) {
+    return directUserId.trim();
+  }
+
+  const nestedInput = asObject(inputs?.input);
+  const nestedUserId = nestedInput?.userId;
+  if (typeof nestedUserId === 'string' && nestedUserId.trim()) {
+    return nestedUserId.trim();
+  }
+
+  const messages = inputs?.messages;
+  if (Array.isArray(messages)) {
+    for (const message of messages) {
+      if (typeof message === 'string') {
+        const matched = message.match(/"userId"\s*:\s*"([^"]+)"/);
+        if (matched?.[1]) {
+          return matched[1].trim();
+        }
+      }
+
+      const messageObj = asObject(message);
+      const content = messageObj?.content;
+      if (typeof content === 'string') {
+        const matched = content.match(/"userId"\s*:\s*"([^"]+)"/);
+        if (matched?.[1]) {
+          return matched[1].trim();
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+function extractTokenUsage(run: LangSmithRun): { promptTokens: number; completionTokens: number; totalTokens: number } {
+  const promptTokens = Number(run.prompt_tokens || 0);
+  const completionTokens = Number(run.completion_tokens || 0);
+  const totalTokensRaw = Number(run.total_tokens || 0);
+  const totalTokens = totalTokensRaw > 0 ? totalTokensRaw : promptTokens + completionTokens;
+
+  return {
+    promptTokens: Math.max(0, Math.round(promptTokens)),
+    completionTokens: Math.max(0, Math.round(completionTokens)),
+    totalTokens: Math.max(0, Math.round(totalTokens)),
+  };
+}
+
+function buildHistoryItem(run: LangSmithRun): LangSmithHistoryItem {
+  const startTime = toTimestamp(run.start_time);
+  const endTime = toTimestamp(run.end_time);
+  const durationMs = startTime && endTime && endTime >= startTime ? endTime - startTime : 0;
+  const usage = extractTokenUsage(run);
+
+  let status = 'running';
+  if (run.error) {
+    status = 'failed';
+  } else if (endTime) {
+    status = 'completed';
+  }
+
+  return {
+    id: run.id,
+    status,
+    prompt: run.name || run.run_type || 'lesson_generation',
+    token_count: usage.totalTokens,
+    prompt_tokens: usage.promptTokens,
+    completion_tokens: usage.completionTokens,
+    duration_ms: durationMs,
+    error_msg: run.error || undefined,
+    created_at: toISOTime(run.start_time) || new Date(0).toISOString(),
+    completed_at: toISOTime(run.end_time),
+  };
+}
+
+function buildUsageStats(runs: LangSmithRun[]): LangSmithUsageStats {
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  let totalTokens = 0;
+  let totalDurationMs = 0;
+  let completedCount = 0;
+  let failedCount = 0;
+  let thisMonthCount = 0;
+
+  for (const run of runs) {
+    const usage = extractTokenUsage(run);
+    totalTokens += usage.totalTokens;
+
+    const startTime = toTimestamp(run.start_time);
+    const endTime = toTimestamp(run.end_time);
+
+    if (run.error) {
+      failedCount += 1;
+    } else if (endTime) {
+      completedCount += 1;
+    }
+
+    if (startTime && startTime >= monthStart.getTime()) {
+      thisMonthCount += 1;
+    }
+
+    if (startTime && endTime && endTime >= startTime) {
+      totalDurationMs += endTime - startTime;
+    }
+  }
+
+  return {
+    total_count: runs.length,
+    completed_count: completedCount,
+    failed_count: failedCount,
+    total_tokens: totalTokens,
+    avg_duration_ms: runs.length > 0 ? totalDurationMs / runs.length : 0,
+    this_month_generations: thisMonthCount,
+    total_lessons: 0,
   };
 }
 
@@ -324,6 +570,82 @@ export async function getKnowledgeSubgraph(req: Request, res: Response) {
     });
   } catch (error) {
     logger.error('Knowledge subgraph error', { error });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+export async function getLangSmithTokenUsage(req: Request, res: Response) {
+  try {
+    const userId = String(req.query.userId || '').trim();
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        error: '缺少必要参数：userId',
+      });
+      return;
+    }
+
+    if (!config.langsmith.enabled || !config.langsmith.apiKey) {
+      res.status(503).json({
+        success: false,
+        error: 'LangSmith tracing 未启用或未配置 API Key',
+      });
+      return;
+    }
+
+    const page = parsePositiveInt(req.query.page, DEFAULT_LANGSMITH_PAGE);
+    const pageSize = parsePositiveInt(req.query.pageSize, DEFAULT_LANGSMITH_PAGE_SIZE, MAX_LANGSMITH_PAGE_SIZE);
+
+    const client = new LangSmithClient({
+      apiUrl: config.langsmith.endpoint,
+      apiKey: config.langsmith.apiKey,
+      timeout_ms: 30000,
+    });
+
+    const userRuns: LangSmithRun[] = [];
+
+    for await (const run of client.listRuns({
+      projectName: config.langsmith.project,
+      isRoot: true,
+      order: 'desc',
+      limit: MAX_LANGSMITH_FETCH_LIMIT,
+    })) {
+      if (extractRunUserId(run) === userId) {
+        userRuns.push(run);
+      }
+    }
+
+    userRuns.sort((first, second) => {
+      const secondStart = toTimestamp(second.start_time) || 0;
+      const firstStart = toTimestamp(first.start_time) || 0;
+      return secondStart - firstStart;
+    });
+
+    const total = userRuns.length;
+    const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0;
+    const offset = (page - 1) * pageSize;
+    const items = userRuns.slice(offset, offset + pageSize).map(buildHistoryItem);
+
+    const payload: LangSmithUsageResponse = {
+      success: true,
+      source: 'langsmith',
+      project: config.langsmith.project,
+      stats: buildUsageStats(userRuns),
+      history: {
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages,
+      },
+    };
+
+    res.json(payload);
+  } catch (error) {
+    logger.error('LangSmith token usage query failed', { error });
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error',

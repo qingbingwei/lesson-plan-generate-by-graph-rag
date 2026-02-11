@@ -156,6 +156,7 @@ func (r *Router) Setup(engine *gin.Engine) {
 			generate.GET("/history", r.generationHandler.ListGenerations)
 			generate.GET("/history/:id", r.generationHandler.GetGeneration)
 			generate.GET("/stats", r.generationHandler.GetStats)
+			generate.GET("/langsmith/usage", r.generationHandler.GetLangSmithUsage)
 		}
 
 		// 知识图谱路由

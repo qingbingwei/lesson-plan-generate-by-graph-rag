@@ -113,6 +113,26 @@ func (h *GenerationHandler) GetStats(c *gin.Context) {
 	Success(c, stats)
 }
 
+// GetLangSmithUsage 获取 LangSmith Token 使用情况
+func (h *GenerationHandler) GetLangSmithUsage(c *gin.Context) {
+	userID, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "未认证", nil)
+		return
+	}
+
+	page, pageSize := GetPagination(c)
+	userUUID, _ := uuid.Parse(userID)
+
+	payload, err := h.generationService.GetLangSmithUsage(c.Request.Context(), userUUID, page, pageSize)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "获取 LangSmith Token 数据失败", err.Error())
+		return
+	}
+
+	Success(c, payload)
+}
+
 // SearchKnowledge 知识搜索
 func (h *GenerationHandler) SearchKnowledge(c *gin.Context) {
 	query := c.Query("q")
