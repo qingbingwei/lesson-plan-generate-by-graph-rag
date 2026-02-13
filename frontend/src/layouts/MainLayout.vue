@@ -18,6 +18,8 @@ import {
   Fold,
   Expand,
   Key,
+  Reading,
+  ChatDotRound,
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -42,6 +44,8 @@ const menuItems = [
   { name: '知识库管理', path: '/knowledge/upload', icon: Upload },
   { name: '我的收藏', path: '/favorites', icon: Star },
   { name: 'Token与密钥', path: '/token-usage', icon: Key },
+  { name: '帮助文档', path: '/help-docs', icon: Reading },
+  { name: '智能问答', path: '/ai-assistant', icon: ChatDotRound },
 ];
 
 const activeMenu = computed(() => {

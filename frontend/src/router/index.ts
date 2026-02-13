@@ -83,6 +83,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/TokenUsage.vue'),
         meta: { title: 'Token与密钥' },
       },
+
+      {
+        path: 'help-docs',
+        name: 'HelpDocs',
+        component: () => import('@/views/HelpDocs.vue'),
+        meta: { title: '帮助文档' },
+      },
+      {
+        path: 'ai-assistant',
+        name: 'AiAssistant',
+        component: () => import('@/views/AiAssistant.vue'),
+        meta: { title: '智能问答' },
+      },
     ],
   },
   {

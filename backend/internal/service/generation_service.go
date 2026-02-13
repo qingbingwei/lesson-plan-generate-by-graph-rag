@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"lesson-plan/backend/internal/config"
@@ -23,6 +24,7 @@ type GenerationService interface {
 	ListByUser(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.Generation, int64, error)
 	GetStats(ctx context.Context, userID uuid.UUID) (*repository.GenerationStats, error)
 	GetLangSmithUsage(ctx context.Context, userID uuid.UUID, page, pageSize int) (*LangSmithUsagePayload, error)
+	AskAssistant(ctx context.Context, userID uuid.UUID, req *AssistantChatRequest, keyOverride APIKeyOverride) (*AssistantChatPayload, error)
 }
 
 // generationService 生成服务实现
@@ -192,6 +194,79 @@ func (s *generationService) GetLangSmithUsage(ctx context.Context, userID uuid.U
 		Project: agentResp.Project,
 		Stats:   agentResp.Stats,
 		History: agentResp.History,
+	}, nil
+}
+
+func (s *generationService) AskAssistant(ctx context.Context, userID uuid.UUID, req *AssistantChatRequest, keyOverride APIKeyOverride) (*AssistantChatPayload, error) {
+	if req == nil {
+		return nil, fmt.Errorf("assistant request is nil")
+	}
+
+	req.Question = strings.TrimSpace(req.Question)
+	if req.Question == "" {
+		return nil, fmt.Errorf("assistant question is required")
+	}
+	req.UserID = userID.String()
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal assistant request failed: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/api/assistant/chat", s.cfg.URL)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create assistant request failed: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	if keyOverride.GenerationAPIKey != "" {
+		httpReq.Header.Set(HeaderGenerationAPIKey, keyOverride.GenerationAPIKey)
+	}
+	if s.cfg.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
+	}
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("call assistant endpoint failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read assistant response failed: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("assistant endpoint returned error: %d - %s", resp.StatusCode, string(respBody))
+	}
+
+	var agentResp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Answer      string   `json:"answer"`
+			Suggestions []string `json:"suggestions,omitempty"`
+		} `json:"data"`
+		Usage *TokenUsage `json:"usage,omitempty"`
+		Error string      `json:"error,omitempty"`
+	}
+
+	if err := json.Unmarshal(respBody, &agentResp); err != nil {
+		return nil, fmt.Errorf("unmarshal assistant response failed: %w", err)
+	}
+
+	if !agentResp.Success {
+		if agentResp.Error != "" {
+			return nil, fmt.Errorf("assistant query failed: %s", agentResp.Error)
+		}
+		return nil, fmt.Errorf("assistant query failed")
+	}
+
+	return &AssistantChatPayload{
+		Answer:      strings.TrimSpace(agentResp.Data.Answer),
+		Suggestions: agentResp.Data.Suggestions,
+		Usage:       agentResp.Usage,
 	}, nil
 }
 

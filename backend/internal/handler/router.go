@@ -153,6 +153,7 @@ func (r *Router) Setup(engine *gin.Engine) {
 		generate.Use(middleware.AuthMiddleware(r.jwtManager))
 		{
 			generate.POST("", r.generationHandler.Generate)
+			generate.POST("/assistant/chat", r.generationHandler.AskAssistant)
 			generate.GET("/history", r.generationHandler.ListGenerations)
 			generate.GET("/history/:id", r.generationHandler.GetGeneration)
 			generate.GET("/stats", r.generationHandler.GetStats)

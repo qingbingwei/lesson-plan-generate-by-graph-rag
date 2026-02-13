@@ -10,6 +10,7 @@ import {
   getKnowledgeSubgraph,
   createEmbedding,
   getLangSmithTokenUsage,
+  chatAssistant,
 } from '../controllers/lessonController';
 
 const router = Router();
@@ -20,6 +21,7 @@ router.get('/health', healthCheck);
 // 教案生成
 router.post('/api/generate', generateLesson);
 router.post('/api/generate/stream', streamGenerateLesson);
+router.post('/api/assistant/chat', chatAssistant);
 router.post('/api/regenerate-section', regenerateSection);
 router.post('/api/embedding', createEmbedding);
 

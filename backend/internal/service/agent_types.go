@@ -66,6 +66,25 @@ type TokenUsage struct {
 	TotalTokens      int `json:"totalTokens"`
 }
 
+type AssistantHistoryMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// AssistantChatRequest 智能问答请求
+type AssistantChatRequest struct {
+	Question string                    `json:"question"`
+	History  []AssistantHistoryMessage `json:"history,omitempty"`
+	UserID   string                    `json:"userId,omitempty"`
+}
+
+// AssistantChatPayload 智能问答响应数据
+type AssistantChatPayload struct {
+	Answer      string      `json:"answer"`
+	Suggestions []string    `json:"suggestions,omitempty"`
+	Usage       *TokenUsage `json:"usage,omitempty"`
+}
+
 // 辅助函数：格式化教学目标
 func FormatObjectives(obj LessonObjectives) string {
 	result := ""

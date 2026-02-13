@@ -133,6 +133,40 @@ func (h *GenerationHandler) GetLangSmithUsage(c *gin.Context) {
 	Success(c, payload)
 }
 
+// AskAssistant 项目智能问答
+func (h *GenerationHandler) AskAssistant(c *gin.Context) {
+	userID, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "未认证", nil)
+		return
+	}
+
+	var req service.AssistantChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		return
+	}
+
+	req.Question = strings.TrimSpace(req.Question)
+	if req.Question == "" {
+		Error(c, http.StatusBadRequest, "请输入问题", nil)
+		return
+	}
+
+	userUUID, _ := uuid.Parse(userID)
+	keyOverride := service.NewAPIKeyOverride(
+		c.GetHeader(service.HeaderGenerationAPIKey),
+		c.GetHeader(service.HeaderEmbeddingAPIKey),
+	)
+	payload, err := h.generationService.AskAssistant(c.Request.Context(), userUUID, &req, keyOverride)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "智能问答失败", err.Error())
+		return
+	}
+
+	Success(c, payload)
+}
+
 // SearchKnowledge 知识搜索
 func (h *GenerationHandler) SearchKnowledge(c *gin.Context) {
 	query := c.Query("q")

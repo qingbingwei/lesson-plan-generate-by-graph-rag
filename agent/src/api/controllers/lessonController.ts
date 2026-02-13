@@ -12,7 +12,7 @@ import {
   EMBEDDING_API_KEY_HEADER,
   type RequestApiKeyOverrides,
 } from '../../shared/context/requestApiKeys';
-import type { GenerateLessonRequest, RegenerateSectionRequest } from '../../shared/types';
+import type { DeepSeekMessage, GenerateLessonRequest, RegenerateSectionRequest } from '../../shared/types';
 
 /**
  * 健康检查
@@ -72,12 +72,104 @@ type LangSmithUsageResponse = {
   };
 };
 
+
+type AssistantHistoryMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+type AssistantChatRequest = {
+  question?: string;
+  history?: AssistantHistoryMessage[];
+  userId?: string;
+};
+
+const ASSISTANT_SYSTEM_PROMPT = `你是“智能教案生成系统”的 AI 助手，必须围绕本项目提供帮助。
+
+你的能力边界：
+1. 指导用户完成项目使用流程（登录、知识库上传、教案生成、编辑发布）。
+2. 提供可直接复用的教案模板（支持按学科、年级、课时组织）。
+3. 解答系统功能问题（知识图谱、历史版本、Token 与 API Key 配置）。
+4. 提供常见故障排查建议（服务启动失败、接口报错、配置缺失等）。
+
+回答要求：
+- 使用中文，结构清晰，步骤化表达。
+- 若用户请求“模板”，优先输出 Markdown 模板，包含：教学目标、重点难点、教学过程、作业评价等。
+- 若信息不足，先提出 1-3 个澄清问题再给建议。
+- 禁止编造未确认的项目能力；不确定时明确说明并给出可执行替代方案。`;
+
+const MAX_ASSISTANT_HISTORY = 12;
+const DEFAULT_ASSISTANT_SUGGESTIONS = [
+  '如何从零开始使用这个系统？',
+  '给我一个 45 分钟数学教案模板',
+  '知识图谱页面怎么配合教案生成？',
+  '启动失败时应该优先看哪些日志？',
+];
+
 const DEFAULT_LANGSMITH_PAGE = 1;
 const DEFAULT_LANGSMITH_PAGE_SIZE = 10;
 const MAX_LANGSMITH_PAGE_SIZE = 100;
 const MAX_LANGSMITH_FETCH_LIMIT = 1000;
 const LANGSMITH_USAGE_CACHE_TTL_MS = 60 * 1000;
 const MAX_LANGSMITH_CACHE_ENTRIES = 200;
+
+
+function normalizeAssistantHistory(history: unknown): DeepSeekMessage[] {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .map((item): DeepSeekMessage | null => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+
+      const roleRaw = (item as { role?: unknown }).role;
+      const contentRaw = (item as { content?: unknown }).content;
+
+      if (typeof contentRaw !== 'string') {
+        return null;
+      }
+
+      const content = contentRaw.trim();
+      if (!content) {
+        return null;
+      }
+
+      if (roleRaw !== 'user' && roleRaw !== 'assistant') {
+        return null;
+      }
+
+      return {
+        role: roleRaw,
+        content,
+      };
+    })
+    .filter((message): message is DeepSeekMessage => message !== null);
+}
+
+function buildAssistantSuggestions(question: string): string[] {
+  const normalized = question.toLowerCase();
+
+  if (normalized.includes('模板') || normalized.includes('教案')) {
+    return [
+      '生成一份高中数学 45 分钟教案模板',
+      '生成一份初中英语阅读课教案模板',
+      '给模板增加分层作业和课堂评价',
+    ];
+  }
+
+  if (normalized.includes('启动') || normalized.includes('报错') || normalized.includes('日志')) {
+    return [
+      '后端启动失败时怎么定位问题？',
+      '如何检查 Agent 与后端连通性？',
+      '服务启动后如何做快速自检？',
+    ];
+  }
+
+  return DEFAULT_ASSISTANT_SUGGESTIONS.slice(0, 3);
+}
 
 type LangSmithUsageCacheEntry = {
   expiresAt: number;
@@ -554,6 +646,54 @@ export async function regenerateSection(req: Request, res: Response) {
     });
   } catch (error) {
     logger.error('Regenerate section error', { error });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+
+
+export async function chatAssistant(req: Request, res: Response) {
+  try {
+    const request = req.body as AssistantChatRequest;
+    const question = typeof request.question === 'string' ? request.question.trim() : '';
+
+    if (!question) {
+      res.status(400).json({
+        success: false,
+        error: '缺少必要参数：question',
+      });
+      return;
+    }
+
+    const history = normalizeAssistantHistory(request.history).slice(-MAX_ASSISTANT_HISTORY);
+    const messages: DeepSeekMessage[] = [
+      { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
+      ...history,
+      { role: 'user', content: question },
+    ];
+
+    const apiKeyOverrides = resolveApiKeyOverrides(req);
+    const { content, usage } = await withRequestApiKeys(apiKeyOverrides, async () => {
+      const deepseek = getDeepSeekClient();
+      return deepseek.chat(messages, {
+        temperature: 0.3,
+        maxTokens: 1800,
+      });
+    });
+
+    res.json({
+      success: true,
+      data: {
+        answer: content.trim(),
+        suggestions: buildAssistantSuggestions(question),
+      },
+      usage,
+    });
+  } catch (error) {
+    logger.error('Assistant chat error', { error });
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error',
