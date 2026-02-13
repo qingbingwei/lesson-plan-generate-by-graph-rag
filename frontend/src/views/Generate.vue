@@ -238,7 +238,7 @@ function handleRegenerate() {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="font-semibold">生成结果</div>
           <div>
-            <el-button :icon="Refresh" @click="handleRegenerate" :disabled="isSaving">重新生成</el-button>
+            <el-button :icon="Refresh" :disabled="isSaving" @click="handleRegenerate">重新生成</el-button>
             <el-button type="primary" :icon="DocumentAdd" :loading="isSaving" @click="handleSave">保存教案</el-button>
           </div>
         </div>

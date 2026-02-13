@@ -299,7 +299,7 @@ class GraphRAG {
     for (const result of results) {
       try {
         // 获取知识点详情及其关系
-        const { node, relations } = await this.neo4jTool.getKnowledgePointWithRelations(
+        const { node } = await this.neo4jTool.getKnowledgePointWithRelations(
           result.node.id,
           depth
         );

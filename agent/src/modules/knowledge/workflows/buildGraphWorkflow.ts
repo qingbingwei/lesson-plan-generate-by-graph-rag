@@ -156,25 +156,6 @@ ${state.request.grade ? `年级：${state.request.grade}` : ''}
       if (jsonMatch) {
         const entities = JSON.parse(jsonMatch[0]) as Array<{name: string; type: string; description: string; difficulty?: string; importance?: number}>;
         
-        // 有效的节点类型及常见别名映射
-        const validTypes = new Set(['Subject', 'Chapter', 'KnowledgePoint', 'Skill', 'Concept', 'Principle', 'Formula', 'Example']);
-        const typeAliasMap: Record<string, string> = {
-          '学科': 'Subject', 'subject': 'Subject',
-          '章节': 'Chapter', 'chapter': 'Chapter', '单元': 'Chapter', '模块': 'Chapter',
-          '知识点': 'KnowledgePoint', 'knowledgepoint': 'KnowledgePoint', 'knowledge_point': 'KnowledgePoint', 'knowledge': 'KnowledgePoint',
-          '技能': 'Skill', 'skill': 'Skill', '能力': 'Skill',
-          '概念': 'Concept', 'concept': 'Concept', '定义': 'Concept',
-          '原理': 'Principle', 'principle': 'Principle', '定理': 'Principle', '定律': 'Principle', '法则': 'Principle',
-          '公式': 'Formula', 'formula': 'Formula', '方程': 'Formula',
-          '示例': 'Example', 'example': 'Example', '例题': 'Example', '案例': 'Example',
-        };
-        function normalizeType(raw: string | undefined): string {
-          if (!raw) return 'KnowledgePoint';
-          if (validTypes.has(raw)) return raw;
-          const mapped = typeAliasMap[raw.toLowerCase()] || typeAliasMap[raw];
-          return mapped || 'KnowledgePoint';
-        }
-
         for (const entity of entities) {
           const id = `${state.request.documentId}-${entity.name.replace(/\s+/g, '-')}`;
           

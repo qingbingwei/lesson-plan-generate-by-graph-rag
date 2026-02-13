@@ -296,43 +296,6 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
-.version-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 12px;
-}
-
-.version-item {
-  border: 1px solid var(--el-border-color-lighter);
-}
-
-.version-item__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.version-item__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.version-item__actions {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.version-preview-dialog :deep(.el-dialog__body) {
-  padding-top: 8px;
-}
-</style>
-
 <template>
   <div class="page-container max-w-5xl mx-auto">
     <el-skeleton v-if="loading" :rows="8" animated />
@@ -550,3 +513,40 @@ onUnmounted(() => {
     </el-empty>
   </div>
 </template>
+
+<style scoped>
+.version-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.version-item {
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.version-item__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.version-item__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.version-item__actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.version-preview-dialog :deep(.el-dialog__body) {
+  padding-top: 8px;
+}
+</style>

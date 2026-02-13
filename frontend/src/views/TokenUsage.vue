@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import axios from 'axios';
 import { ElMessage } from 'element-plus';
 import {
   DataAnalysis,
@@ -13,6 +14,7 @@ import {
   getLangSmithUsage,
   type DashboardStats,
   type GenerationHistoryItem,
+  type LangSmithUsageResponse,
 } from '@/api/generation';
 import {
   clearApiKeySettings,
@@ -21,6 +23,16 @@ import {
   saveApiKeySettings,
 } from '@/utils/apiKeys';
 
+const TOKEN_USAGE_CACHE_KEY = 'token_usage_snapshot_v1';
+const TOKEN_USAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type TokenUsageCacheSnapshot = {
+  savedAt: string;
+  page: number;
+  pageSize: number;
+  payload: LangSmithUsageResponse;
+};
+
 const statsLoading = ref(false);
 const historyLoading = ref(false);
 
@@ -28,6 +40,8 @@ const stats = ref<DashboardStats | null>(null);
 const records = ref<GenerationHistoryItem[]>([]);
 const dataSource = ref('langsmith');
 const projectName = ref('');
+const isUsingCachedData = ref(false);
+const lastSyncedAt = ref('');
 
 const total = ref(0);
 const page = ref(1);
@@ -99,19 +113,119 @@ function initApiKeyForm() {
   lastSavedAt.value = saved.updatedAt;
 }
 
-async function loadLangSmithUsage() {
-  statsLoading.value = true;
+function applyUsagePayload(result: LangSmithUsageResponse) {
+  stats.value = result.stats;
+  records.value = result.history.items;
+  total.value = result.history.total;
+  dataSource.value = result.source || 'langsmith';
+  projectName.value = result.project || '';
+
+  if (result.history.page > 0) {
+    page.value = result.history.page;
+  }
+  if (result.history.pageSize > 0) {
+    pageSize.value = result.history.pageSize;
+  }
+}
+
+function readUsageCache(): boolean {
+  try {
+    const raw = localStorage.getItem(TOKEN_USAGE_CACHE_KEY);
+    if (!raw) {
+      return false;
+    }
+
+    const snapshot = JSON.parse(raw) as TokenUsageCacheSnapshot;
+    if (!snapshot || !snapshot.savedAt || !snapshot.payload || !snapshot.payload.history) {
+      localStorage.removeItem(TOKEN_USAGE_CACHE_KEY);
+      return false;
+    }
+
+    const savedAtMs = new Date(snapshot.savedAt).getTime();
+    if (!Number.isFinite(savedAtMs) || Date.now() - savedAtMs > TOKEN_USAGE_CACHE_TTL_MS) {
+      localStorage.removeItem(TOKEN_USAGE_CACHE_KEY);
+      return false;
+    }
+
+    if (snapshot.page > 0) {
+      page.value = snapshot.page;
+    }
+    if (snapshot.pageSize > 0) {
+      pageSize.value = snapshot.pageSize;
+    }
+
+    applyUsagePayload(snapshot.payload);
+    isUsingCachedData.value = true;
+    lastSyncedAt.value = snapshot.savedAt;
+    return true;
+  } catch {
+    localStorage.removeItem(TOKEN_USAGE_CACHE_KEY);
+    return false;
+  }
+}
+
+function persistUsageCache(payload: LangSmithUsageResponse) {
+  const snapshot: TokenUsageCacheSnapshot = {
+    savedAt: new Date().toISOString(),
+    page: page.value,
+    pageSize: pageSize.value,
+    payload,
+  };
+
+  try {
+    localStorage.setItem(TOKEN_USAGE_CACHE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // ignore cache write failures
+  }
+}
+
+function extractErrorMessage(error: unknown): string {
+  let message = '加载 LangSmith Token 数据失败';
+
+  if (axios.isAxiosError(error)) {
+    const responseData = error.response?.data as { message?: string; data?: unknown } | undefined;
+
+    if (typeof responseData?.data === 'string' && responseData.data.trim()) {
+      message = responseData.data;
+    } else if (typeof responseData?.message === 'string' && responseData.message.trim()) {
+      message = responseData.message;
+    } else if (error.message) {
+      message = error.message;
+    }
+
+    return message;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return message;
+}
+
+async function loadLangSmithUsage(options: { silent?: boolean } = {}) {
+  const silent = options.silent === true;
+
+  if (!silent) {
+    statsLoading.value = true;
+  }
   historyLoading.value = true;
+
   try {
     const result = await getLangSmithUsage(page.value, pageSize.value);
-    stats.value = result.stats;
-    records.value = result.history.items;
-    total.value = result.history.total;
-    dataSource.value = result.source || 'langsmith';
-    projectName.value = result.project || '';
+    applyUsagePayload(result);
+    persistUsageCache(result);
+    isUsingCachedData.value = false;
+    lastSyncedAt.value = new Date().toISOString();
   } catch (error) {
-    const message = error instanceof Error ? error.message : '加载 LangSmith Token 数据失败';
-    ElMessage.error(message || '加载 LangSmith Token 数据失败');
+    const message = extractErrorMessage(error);
+
+    if (isUsingCachedData.value || stats.value !== null) {
+      console.warn('[TokenUsage] refresh failed:', message);
+      ElMessage.info('LangSmith 同步较慢，当前先展示最近缓存数据');
+    } else {
+      ElMessage.error(message);
+    }
   } finally {
     statsLoading.value = false;
     historyLoading.value = false;
@@ -120,13 +234,13 @@ async function loadLangSmithUsage() {
 
 function handlePageChange(nextPage: number) {
   page.value = nextPage;
-  loadLangSmithUsage();
+  loadLangSmithUsage({ silent: true });
 }
 
 function handlePageSizeChange(nextPageSize: number) {
   pageSize.value = nextPageSize;
   page.value = 1;
-  loadLangSmithUsage();
+  loadLangSmithUsage({ silent: true });
 }
 
 function saveApiKeys() {
@@ -152,15 +266,19 @@ function clearApiKeys() {
 
 onMounted(() => {
   initApiKeyForm();
-  loadLangSmithUsage();
+  const hasCachedSnapshot = readUsageCache();
+  loadLangSmithUsage({ silent: hasCachedSnapshot });
 });
 </script>
+
 
 <template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">Token 使用与 API Key 配置</h1>
       <p class="page-subtitle">以下 Token 统计全部来自 LangSmith Trace，并支持手动配置生成与 Embedding 的 API Key</p>
+      <p v-if="isUsingCachedData" class="text-xs app-text-muted mt-1">已优先展示最近缓存数据，正在后台同步 LangSmith...</p>
+      <p v-else-if="lastSyncedAt" class="text-xs app-text-muted mt-1">最近同步：{{ formatDate(lastSyncedAt) }}</p>
     </div>
 
     <el-row :gutter="16">
@@ -252,12 +370,13 @@ onMounted(() => {
             <span class="font-semibold">LangSmith Token 明细</span>
             <el-tag size="small" effect="plain">{{ dataSource }}</el-tag>
             <el-tag v-if="projectName" size="small" type="info" effect="plain">{{ projectName }}</el-tag>
+            <el-tag v-if="isUsingCachedData" size="small" type="warning" effect="plain">缓存数据</el-tag>
           </div>
-          <el-button text :icon="RefreshRight" @click="loadLangSmithUsage">刷新</el-button>
+          <el-button text :icon="RefreshRight" @click="loadLangSmithUsage({ silent: true })">刷新</el-button>
         </div>
       </template>
 
-      <el-table :data="records" stripe v-loading="historyLoading">
+      <el-table v-loading="historyLoading" :data="records" stripe>
         <el-table-column label="时间" min-width="170">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}

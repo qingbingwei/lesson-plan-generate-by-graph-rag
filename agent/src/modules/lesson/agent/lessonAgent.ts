@@ -19,8 +19,6 @@ import type {
   GenerateLessonRequest,
   GenerateLessonResponse,
   GeneratedLesson,
-  LessonObjectives,
-  LessonSection,
   TokenUsage,
   WorkflowState,
 } from '../../../shared/types';

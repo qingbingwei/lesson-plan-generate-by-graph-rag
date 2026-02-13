@@ -1,4 +1,6 @@
-import api from './index';
+import axios from 'axios';
+import api, { agentApi } from './index';
+import { useAuthStore } from '@/stores/auth';
 import type { 
   GenerateLessonRequest, 
   KnowledgePoint,
@@ -220,14 +222,52 @@ export interface LangSmithUsageResponse {
 }
 
 export async function getLangSmithUsage(page: number = 1, pageSize: number = 10): Promise<LangSmithUsageResponse> {
-  const response = await api.get<ApiResponse<LangSmithUsageResponse>>('/generate/langsmith/usage', {
-    params: {
-      page,
-      page_size: pageSize,
-    },
-  });
+  try {
+    const response = await api.get<ApiResponse<LangSmithUsageResponse>>('/generate/langsmith/usage', {
+      params: {
+        page,
+        page_size: pageSize,
+      },
+    });
 
-  return response.data.data;
+    return response.data.data;
+  } catch (error) {
+    const statusCode = axios.isAxiosError(error) ? error.response?.status : undefined;
+
+    const shouldFallbackToAgent = statusCode === 404 || (typeof statusCode === 'number' && statusCode >= 500);
+    if (!shouldFallbackToAgent) {
+      throw error;
+    }
+
+    const authStore = useAuthStore();
+    const userId = authStore.user?.id;
+
+    if (!userId) {
+      throw new Error('无法获取当前用户信息，请重新登录后重试');
+    }
+
+    const fallback = await agentApi.get<LangSmithUsageResponse & { success?: boolean; error?: string }>(
+      '/api/langsmith/token-usage',
+      {
+        params: {
+          userId: String(userId),
+          page,
+          pageSize,
+        },
+      }
+    );
+
+    if (fallback.data && fallback.data.success === false) {
+      throw new Error(fallback.data.error || '获取 LangSmith 数据失败');
+    }
+
+    return {
+      source: fallback.data.source || 'langsmith',
+      project: fallback.data.project,
+      stats: fallback.data.stats,
+      history: fallback.data.history,
+    };
+  }
 }
 
 /**

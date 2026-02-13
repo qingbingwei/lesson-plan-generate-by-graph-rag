@@ -75,7 +75,58 @@ type LangSmithUsageResponse = {
 const DEFAULT_LANGSMITH_PAGE = 1;
 const DEFAULT_LANGSMITH_PAGE_SIZE = 10;
 const MAX_LANGSMITH_PAGE_SIZE = 100;
-const MAX_LANGSMITH_FETCH_LIMIT = 5000;
+const MAX_LANGSMITH_FETCH_LIMIT = 1000;
+const LANGSMITH_USAGE_CACHE_TTL_MS = 60 * 1000;
+const MAX_LANGSMITH_CACHE_ENTRIES = 200;
+
+type LangSmithUsageCacheEntry = {
+  expiresAt: number;
+  payload: LangSmithUsageResponse;
+};
+
+const langSmithUsageCache = new Map<string, LangSmithUsageCacheEntry>();
+
+function buildLangSmithCacheKey(userId: string, page: number, pageSize: number): string {
+  return `${config.langsmith.project}:${userId}:${page}:${pageSize}`;
+}
+
+function getLangSmithUsageFromCache(cacheKey: string): LangSmithUsageResponse | null {
+  const entry = langSmithUsageCache.get(cacheKey);
+  if (!entry) {
+    return null;
+  }
+
+  if (entry.expiresAt <= Date.now()) {
+    langSmithUsageCache.delete(cacheKey);
+    return null;
+  }
+
+  return entry.payload;
+}
+
+function setLangSmithUsageCache(cacheKey: string, payload: LangSmithUsageResponse): void {
+  const now = Date.now();
+
+  for (const [entryKey, entry] of langSmithUsageCache.entries()) {
+    if (entry.expiresAt <= now) {
+      langSmithUsageCache.delete(entryKey);
+    }
+  }
+
+  while (langSmithUsageCache.size >= MAX_LANGSMITH_CACHE_ENTRIES) {
+    const oldestKey = langSmithUsageCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+
+    langSmithUsageCache.delete(oldestKey);
+  }
+
+  langSmithUsageCache.set(cacheKey, {
+    expiresAt: now + LANGSMITH_USAGE_CACHE_TTL_MS,
+    payload,
+  });
+}
 
 function parsePositiveInt(value: unknown, fallback: number, maxValue?: number): number {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -96,6 +147,37 @@ function asObject(value: unknown): Record<string, unknown> | null {
   }
 
   return value as Record<string, unknown>;
+}
+
+function getErrorStatus(error: unknown): number | null {
+  const topLevel = asObject(error);
+
+  const directStatus = topLevel?.status;
+  if (typeof directStatus === 'number' && Number.isFinite(directStatus)) {
+    return directStatus;
+  }
+
+  if (typeof directStatus === 'string') {
+    const parsed = Number.parseInt(directStatus, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  const response = asObject(topLevel?.response);
+  const responseStatus = response?.status;
+  if (typeof responseStatus === 'number' && Number.isFinite(responseStatus)) {
+    return responseStatus;
+  }
+
+  if (typeof responseStatus === 'string') {
+    const parsed = Number.parseInt(responseStatus, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 function toTimestamp(value: string | number | undefined): number | null {
@@ -599,6 +681,13 @@ export async function getLangSmithTokenUsage(req: Request, res: Response) {
     const page = parsePositiveInt(req.query.page, DEFAULT_LANGSMITH_PAGE);
     const pageSize = parsePositiveInt(req.query.pageSize, DEFAULT_LANGSMITH_PAGE_SIZE, MAX_LANGSMITH_PAGE_SIZE);
 
+    const cacheKey = buildLangSmithCacheKey(userId, page, pageSize);
+    const cachedPayload = getLangSmithUsageFromCache(cacheKey);
+    if (cachedPayload) {
+      res.json(cachedPayload);
+      return;
+    }
+
     const client = new LangSmithClient({
       apiUrl: config.langsmith.endpoint,
       apiKey: config.langsmith.apiKey,
@@ -606,16 +695,51 @@ export async function getLangSmithTokenUsage(req: Request, res: Response) {
     });
 
     const userRuns: LangSmithRun[] = [];
+    const listRunAttempts: Array<{ projectName: string; isRoot?: boolean; limit?: number }> = [
+      { projectName: config.langsmith.project, isRoot: true, limit: MAX_LANGSMITH_FETCH_LIMIT },
+      { projectName: config.langsmith.project, isRoot: true, limit: 200 },
+      { projectName: config.langsmith.project, isRoot: true },
+      { projectName: config.langsmith.project, limit: 200 },
+      { projectName: config.langsmith.project },
+    ];
 
-    for await (const run of client.listRuns({
-      projectName: config.langsmith.project,
-      isRoot: true,
-      order: 'desc',
-      limit: MAX_LANGSMITH_FETCH_LIMIT,
-    })) {
-      if (extractRunUserId(run) === userId) {
-        userRuns.push(run);
+    let lastListRunsError: unknown = null;
+    let listRunsSucceeded = false;
+
+    for (const attempt of listRunAttempts) {
+      userRuns.length = 0;
+
+      try {
+        for await (const run of client.listRuns(attempt)) {
+          if (extractRunUserId(run) === userId) {
+            userRuns.push(run);
+
+            if (userRuns.length >= MAX_LANGSMITH_FETCH_LIMIT) {
+              break;
+            }
+          }
+        }
+
+        listRunsSucceeded = true;
+        break;
+      } catch (attemptError) {
+        lastListRunsError = attemptError;
+        const status = getErrorStatus(attemptError);
+
+        logger.warn('LangSmith listRuns attempt failed', {
+          status,
+          attempt,
+          error: attemptError instanceof Error ? attemptError.message : String(attemptError),
+        });
+
+        if (status !== 400) {
+          throw attemptError;
+        }
       }
+    }
+
+    if (!listRunsSucceeded) {
+      throw lastListRunsError || new Error('LangSmith listRuns failed');
     }
 
     userRuns.sort((first, second) => {
@@ -643,9 +767,14 @@ export async function getLangSmithTokenUsage(req: Request, res: Response) {
       },
     };
 
+    setLangSmithUsageCache(cacheKey, payload);
     res.json(payload);
   } catch (error) {
-    logger.error('LangSmith token usage query failed', { error });
+    logger.error('LangSmith token usage query failed', {
+      status: getErrorStatus(error),
+      message: error instanceof Error ? error.message : String(error),
+      error,
+    });
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error',
