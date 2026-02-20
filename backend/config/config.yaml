@@ -70,8 +70,14 @@ cors:
     - "Content-Type"
     - "Accept"
     - "Authorization"
+    - "X-Trace-ID"
+    - "X-Request-ID"
+    - "X-Generation-Api-Key"
+    - "X-Embedding-Api-Key"
   exposed_headers:
     - "Content-Length"
+    - "X-Trace-ID"
+    - "X-Request-ID"
   allow_credentials: true
   max_age: 86400
 

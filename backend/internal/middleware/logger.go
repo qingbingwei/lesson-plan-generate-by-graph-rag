@@ -3,6 +3,7 @@ package middleware
 import (
 	"time"
 
+	"lesson-plan/backend/internal/observability"
 	"lesson-plan/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -14,14 +15,7 @@ func LoggerMiddleware() gin.HandlerFunc {
 		start := time.Now()
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery
-
-		// 生成请求ID
-		requestID := c.GetHeader("X-Request-ID")
-		if requestID == "" {
-			requestID = generateRequestID()
-		}
-		c.Set("request_id", requestID)
-		c.Header("X-Request-ID", requestID)
+		traceID := BindTraceID(c)
 
 		c.Next()
 
@@ -37,6 +31,13 @@ func LoggerMiddleware() gin.HandlerFunc {
 			path = path + "?" + raw
 		}
 
+		route := c.FullPath()
+		if route == "" {
+			route = c.Request.URL.Path
+		}
+
+		observability.RecordHTTPRequest(method, route, statusCode, latency)
+
 		// 根据状态码选择日志级别
 		logFunc := logger.Info
 		if statusCode >= 400 && statusCode < 500 {
@@ -46,23 +47,14 @@ func LoggerMiddleware() gin.HandlerFunc {
 		}
 
 		logFunc("HTTP request",
-			logger.String("request_id", requestID),
+			logger.String("trace_id", traceID),
 			logger.String("client_ip", clientIP),
 			logger.String("method", method),
 			logger.String("path", path),
+			logger.String("route", route),
 			logger.Int("status", statusCode),
 			logger.Int("body_size", bodySize),
 			logger.Duration("latency", latency),
 		)
 	}
-}
-
-// generateRequestID 生成请求ID
-func generateRequestID() string {
-	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, 16)
-	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
-	}
-	return string(b)
 }

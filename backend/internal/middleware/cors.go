@@ -38,6 +38,7 @@ func DefaultCORSConfig() CORSConfig {
 			"Authorization",
 			"Origin",
 			"X-Requested-With",
+			"X-Trace-ID",
 			"X-Request-ID",
 			"X-Generation-Api-Key",
 			"X-Embedding-Api-Key",
@@ -45,6 +46,7 @@ func DefaultCORSConfig() CORSConfig {
 		ExposeHeaders: []string{
 			"Content-Length",
 			"Content-Type",
+			"X-Trace-ID",
 			"X-Request-ID",
 			"X-Generation-Api-Key",
 			"X-Embedding-Api-Key",

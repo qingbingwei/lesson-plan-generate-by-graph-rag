@@ -1,12 +1,10 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"lesson-plan/backend/internal/config"
 	"lesson-plan/backend/internal/model"
@@ -35,9 +33,7 @@ func NewKnowledgeService(
 	return &knowledgeService{
 		knowledgeRepo: knowledgeRepo,
 		cfg:           cfg,
-		httpClient: &http.Client{
-			Timeout: 600 * time.Second,
-		},
+		httpClient:    newAgentHTTPClient(cfg),
 	}
 }
 
@@ -99,37 +95,32 @@ func (s *knowledgeService) GetEmbedding(ctx context.Context, text string) ([]flo
 	}
 
 	url := fmt.Sprintf("%s/api/embedding", s.cfg.URL)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
+	headers := map[string]string{
+		"Content-Type": "application/json",
 	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
 	override := APIKeyOverrideFromContext(ctx)
 	if override.GenerationAPIKey != "" {
-		httpReq.Header.Set(HeaderGenerationAPIKey, override.GenerationAPIKey)
+		headers[HeaderGenerationAPIKey] = override.GenerationAPIKey
 	}
 	if override.EmbeddingAPIKey != "" {
-		httpReq.Header.Set(HeaderEmbeddingAPIKey, override.EmbeddingAPIKey)
+		headers[HeaderEmbeddingAPIKey] = override.EmbeddingAPIKey
 	}
 	if s.cfg.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
+		headers["Authorization"] = "Bearer " + s.cfg.APIKey
 	}
 
-	resp, err := s.httpClient.Do(httpReq)
+	statusCode, respBody, err := doAgentRequestWithRetry(ctx, s.httpClient, http.MethodPost, url, body, headers, "embedding")
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("embedding API returned status: %d", resp.StatusCode)
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("embedding API returned status: %d", statusCode)
 	}
 
 	var result struct {
 		Embedding []float64 `json:"embedding"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, err
 	}
 

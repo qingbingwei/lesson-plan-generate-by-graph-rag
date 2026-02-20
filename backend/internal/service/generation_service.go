@@ -1,14 +1,11 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"lesson-plan/backend/internal/config"
 	"lesson-plan/backend/internal/model"
@@ -45,9 +42,7 @@ func NewGenerationService(
 		generationRepo: generationRepo,
 		lessonRepo:     lessonRepo,
 		cfg:            cfg,
-		httpClient: &http.Client{
-			Timeout: 600 * time.Second,
-		},
+		httpClient:     newAgentHTTPClient(cfg),
 	}
 }
 
@@ -145,28 +140,18 @@ func (s *generationService) GetLangSmithUsage(ctx context.Context, userID uuid.U
 	}
 
 	url := fmt.Sprintf("%s/api/langsmith/token-usage?userId=%s&page=%d&pageSize=%d", s.cfg.URL, userID.String(), page, pageSize)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create langsmith usage request failed: %w", err)
-	}
-
+	headers := map[string]string{}
 	if s.cfg.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
+		headers["Authorization"] = "Bearer " + s.cfg.APIKey
 	}
 
-	resp, err := s.httpClient.Do(httpReq)
+	statusCode, body, err := doAgentRequestWithRetry(ctx, s.httpClient, http.MethodGet, url, nil, headers, "langsmith_usage")
 	if err != nil {
 		return nil, fmt.Errorf("call langsmith usage endpoint failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read langsmith usage response failed: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("langsmith usage endpoint returned error: %d - %s", resp.StatusCode, string(body))
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("langsmith usage endpoint returned error: %d - %s", statusCode, string(body))
 	}
 
 	var agentResp struct {
@@ -214,32 +199,26 @@ func (s *generationService) AskAssistant(ctx context.Context, userID uuid.UUID, 
 	}
 
 	url := fmt.Sprintf("%s/api/assistant/chat", s.cfg.URL)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create assistant request failed: %w", err)
+	headers := map[string]string{
+		"Content-Type": "application/json",
 	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
 	if keyOverride.GenerationAPIKey != "" {
-		httpReq.Header.Set(HeaderGenerationAPIKey, keyOverride.GenerationAPIKey)
+		headers[HeaderGenerationAPIKey] = keyOverride.GenerationAPIKey
+	}
+	if keyOverride.EmbeddingAPIKey != "" {
+		headers[HeaderEmbeddingAPIKey] = keyOverride.EmbeddingAPIKey
 	}
 	if s.cfg.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
+		headers["Authorization"] = "Bearer " + s.cfg.APIKey
 	}
 
-	resp, err := s.httpClient.Do(httpReq)
+	statusCode, respBody, err := doAgentRequestWithRetry(ctx, s.httpClient, http.MethodPost, url, body, headers, "assistant_chat")
 	if err != nil {
 		return nil, fmt.Errorf("call assistant endpoint failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read assistant response failed: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("assistant endpoint returned error: %d - %s", resp.StatusCode, string(respBody))
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("assistant endpoint returned error: %d - %s", statusCode, string(respBody))
 	}
 
 	var agentResp struct {
@@ -322,35 +301,26 @@ func (s *generationService) callAgent(ctx context.Context, userID uuid.UUID, req
 	}
 
 	url := fmt.Sprintf("%s/api/generate", s.cfg.URL)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request failed: %w", err)
+	headers := map[string]string{
+		"Content-Type": "application/json",
 	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
 	if keyOverride.GenerationAPIKey != "" {
-		httpReq.Header.Set(HeaderGenerationAPIKey, keyOverride.GenerationAPIKey)
+		headers[HeaderGenerationAPIKey] = keyOverride.GenerationAPIKey
 	}
 	if keyOverride.EmbeddingAPIKey != "" {
-		httpReq.Header.Set(HeaderEmbeddingAPIKey, keyOverride.EmbeddingAPIKey)
+		headers[HeaderEmbeddingAPIKey] = keyOverride.EmbeddingAPIKey
 	}
 	if s.cfg.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+s.cfg.APIKey)
+		headers["Authorization"] = "Bearer " + s.cfg.APIKey
 	}
 
-	resp, err := s.httpClient.Do(httpReq)
+	statusCode, respBody, err := doAgentRequestWithRetry(ctx, s.httpClient, http.MethodPost, url, body, headers, "generate")
 	if err != nil {
 		return nil, fmt.Errorf("call agent failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response failed: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("agent returned error: %d - %s", resp.StatusCode, string(respBody))
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("agent returned error: %d - %s", statusCode, string(respBody))
 	}
 
 	var agentResp AgentResponse

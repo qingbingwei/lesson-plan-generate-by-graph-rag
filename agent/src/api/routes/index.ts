@@ -12,11 +12,21 @@ import {
   getLangSmithTokenUsage,
   chatAssistant,
 } from '../controllers/lessonController';
+import { snapshotMetrics } from '../../shared/observability/metrics';
 
 const router = Router();
 
 // 健康检查
 router.get('/health', healthCheck);
+router.get('/metrics', (_req, res) => {
+  res.json({
+    success: true,
+    code: 0,
+    message: 'success',
+    data: snapshotMetrics(),
+    trace_id: res.locals.traceId,
+  });
+});
 
 // 教案生成
 router.post('/api/generate', generateLesson);

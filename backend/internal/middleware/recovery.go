@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"fmt"
-	"net/http"
 	"runtime/debug"
 
 	"lesson-plan/backend/pkg/logger"
@@ -23,12 +22,10 @@ func RecoveryMiddleware() gin.HandlerFunc {
 					logger.String("stack", string(stack)),
 					logger.String("path", c.Request.URL.Path),
 					logger.String("method", c.Request.Method),
+					logger.String("trace_id", TraceIDFromGin(c)),
 				)
 
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"code":    500,
-					"message": "服务器内部错误",
-				})
+				abortWithError(c, 500, "INTERNAL_SERVER_ERROR", "服务器内部错误", nil)
 			}
 		}()
 

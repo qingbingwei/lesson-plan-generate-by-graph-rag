@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"net/http"
 	"strings"
 
 	"lesson-plan/backend/pkg/jwt"
@@ -20,38 +19,26 @@ func AuthMiddleware(jwtManager *jwt.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader(AuthorizationHeaderKey)
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "缺少认证头",
-			})
+			abortWithError(c, 401, "AUTH_MISSING_HEADER", "缺少认证头", nil)
 			return
 		}
 
 		fields := strings.Fields(authHeader)
 		if len(fields) < 2 {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "认证头格式错误",
-			})
+			abortWithError(c, 401, "AUTH_INVALID_HEADER", "认证头格式错误", nil)
 			return
 		}
 
 		authType := fields[0]
 		if !strings.EqualFold(authType, AuthorizationTypeBearer) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "不支持的认证类型",
-			})
+			abortWithError(c, 401, "AUTH_UNSUPPORTED_TYPE", "不支持的认证类型", nil)
 			return
 		}
 
 		accessToken := fields[1]
 		claims, err := jwtManager.ValidateToken(accessToken)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "无效的令牌: " + err.Error(),
-			})
+			abortWithError(c, 401, "AUTH_INVALID_TOKEN", "无效的令牌", err.Error())
 			return
 		}
 
@@ -98,19 +85,13 @@ func RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims, exists := c.Get(AuthorizationPayloadKey)
 		if !exists {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "未认证",
-			})
+			abortWithError(c, 401, "AUTH_UNAUTHORIZED", "未认证", nil)
 			return
 		}
 
 		userClaims, ok := claims.(*jwt.Claims)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "无效的令牌载荷",
-			})
+			abortWithError(c, 401, "AUTH_INVALID_CLAIMS", "无效的令牌载荷", nil)
 			return
 		}
 
@@ -123,10 +104,7 @@ func RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		}
 
 		if !allowed {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"code":    403,
-				"message": "权限不足",
-			})
+			abortWithError(c, 403, "AUTH_FORBIDDEN", "权限不足", nil)
 			return
 		}
 

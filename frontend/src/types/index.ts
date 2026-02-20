@@ -208,9 +208,12 @@ export interface KnowledgePoint {
 
 // API 响应类型
 export interface ApiResponse<T = unknown> {
+  success?: boolean;
   code: number;
   message: string;
   data: T;
+  error?: string | { code?: string; details?: unknown };
+  trace_id?: string;
 }
 
 export interface PaginatedResponse<T> {

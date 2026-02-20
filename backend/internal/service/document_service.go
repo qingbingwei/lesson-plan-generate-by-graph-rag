@@ -1,11 +1,9 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -27,9 +25,7 @@ func NewDocumentService(documentRepo repository.DocumentRepository, agentConfig 
 	return &DocumentService{
 		documentRepo: documentRepo,
 		agentConfig:  agentConfig,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Minute, // 长时间处理
-		},
+		httpClient:   newAgentHTTPClient(agentConfig),
 	}
 }
 
@@ -82,25 +78,24 @@ func (s *DocumentService) processDocument(ctx context.Context, doc *model.Knowle
 
 	// 调用Agent API（带 context 超时控制）
 	agentURL := fmt.Sprintf("%s/api/build-graph", s.agentConfig.URL)
-	req, err := http.NewRequestWithContext(ctx, "POST", agentURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		s.documentRepo.UpdateDocumentStatus(doc.ID, model.DocStatusFailed, 0, 0, "请求创建失败")
-		return
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.httpClient.Do(req)
+	statusCode, body, err := doAgentRequestWithRetry(
+		ctx,
+		s.httpClient,
+		http.MethodPost,
+		agentURL,
+		jsonData,
+		map[string]string{
+			"Content-Type": "application/json",
+		},
+		"build_graph",
+	)
 	if err != nil {
 		logger.Error("Failed to call agent: " + err.Error())
 		s.documentRepo.UpdateDocumentStatus(doc.ID, model.DocStatusFailed, 0, 0, "Agent服务调用失败: "+err.Error())
 		return
 	}
-	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
+	if statusCode != http.StatusOK {
 		logger.Error("Agent returned error: " + string(body))
 		s.documentRepo.UpdateDocumentStatus(doc.ID, model.DocStatusFailed, 0, 0, "Agent处理失败")
 		return
@@ -178,19 +173,21 @@ func (s *DocumentService) deleteDocumentNodes(ctx context.Context, documentID st
 	}
 
 	agentURL := fmt.Sprintf("%s/api/delete-document-nodes", s.agentConfig.URL)
-	req, err := http.NewRequestWithContext(ctx, "POST", agentURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.httpClient.Do(req)
+	_, _, err = doAgentRequestWithRetry(
+		ctx,
+		s.httpClient,
+		http.MethodPost,
+		agentURL,
+		jsonData,
+		map[string]string{
+			"Content-Type": "application/json",
+		},
+		"delete_document_nodes",
+	)
 	if err != nil {
 		logger.Error("Failed to delete document nodes: " + err.Error())
 		return
 	}
-	defer resp.Body.Close()
 }
 
 // GetDocumentStatus 获取文档状态

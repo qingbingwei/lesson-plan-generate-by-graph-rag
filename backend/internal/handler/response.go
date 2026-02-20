@@ -4,15 +4,26 @@ import (
 	"net/http"
 	"strconv"
 
+	"lesson-plan/backend/internal/middleware"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
+// APIError 统一错误结构。
+type APIError struct {
+	Code    string      `json:"code"`
+	Details interface{} `json:"details,omitempty"`
+}
+
 // Response 标准响应结构
 type Response struct {
+	Success bool        `json:"success"`
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
+	Error   *APIError   `json:"error,omitempty"`
+	TraceID string      `json:"trace_id,omitempty"`
 }
 
 // PaginatedResponse 分页响应
@@ -27,27 +38,46 @@ type PaginatedResponse struct {
 // Success 成功响应
 func Success(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusOK, Response{
+		Success: true,
 		Code:    0,
 		Message: "success",
 		Data:    data,
+		TraceID: middleware.TraceIDFromGin(c),
 	})
 }
 
 // SuccessWithMessage 带消息的成功响应
 func SuccessWithMessage(c *gin.Context, message string, data interface{}) {
 	c.JSON(http.StatusOK, Response{
+		Success: true,
 		Code:    0,
 		Message: message,
 		Data:    data,
+		TraceID: middleware.TraceIDFromGin(c),
 	})
 }
 
 // Error 错误响应
 func Error(c *gin.Context, statusCode int, message string, data interface{}) {
+	ErrorWithCode(c, statusCode, defaultErrorCode(statusCode), message, data)
+}
+
+// ErrorWithCode 带业务错误码的错误响应。
+func ErrorWithCode(c *gin.Context, statusCode int, errorCode, message string, details interface{}) {
+	errPayload := &APIError{
+		Code:    errorCode,
+		Details: details,
+	}
+	if details == nil {
+		errPayload.Details = nil
+	}
+
 	c.JSON(statusCode, Response{
+		Success: false,
 		Code:    statusCode,
 		Message: message,
-		Data:    data,
+		Error:   errPayload,
+		TraceID: middleware.TraceIDFromGin(c),
 	})
 }
 
@@ -84,6 +114,7 @@ func Paginated(c *gin.Context, items interface{}, total int64, page, pageSize in
 	}
 
 	c.JSON(http.StatusOK, Response{
+		Success: true,
 		Code:    0,
 		Message: "success",
 		Data: PaginatedResponse{
@@ -93,6 +124,7 @@ func Paginated(c *gin.Context, items interface{}, total int64, page, pageSize in
 			PageSize:   pageSize,
 			TotalPages: totalPages,
 		},
+		TraceID: middleware.TraceIDFromGin(c),
 	})
 }
 
@@ -124,4 +156,28 @@ func HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok",
 	})
+}
+
+func defaultErrorCode(statusCode int) string {
+	switch statusCode {
+	case http.StatusBadRequest:
+		return "BAD_REQUEST"
+	case http.StatusUnauthorized:
+		return "UNAUTHORIZED"
+	case http.StatusForbidden:
+		return "FORBIDDEN"
+	case http.StatusNotFound:
+		return "NOT_FOUND"
+	case http.StatusConflict:
+		return "CONFLICT"
+	case http.StatusTooManyRequests:
+		return "RATE_LIMITED"
+	case http.StatusGatewayTimeout:
+		return "GATEWAY_TIMEOUT"
+	default:
+		if statusCode >= 500 {
+			return "INTERNAL_SERVER_ERROR"
+		}
+		return "UNKNOWN_ERROR"
+	}
 }

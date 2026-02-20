@@ -3,7 +3,27 @@ import config from '../../config';
 import logger from '../../shared/utils/logger';
 import { getQwenClient } from './qwen';
 import { getRequestApiKeys } from '../../shared/context/requestApiKeys';
+import { getTraceIdFromContext } from '../../shared/context/traceContext';
+import { recordDownstream } from '../../shared/observability/metrics';
 import type { DeepSeekMessage, TokenUsage } from '../../shared/types';
+
+function extractErrorStatus(error: unknown): number {
+  if (!error || typeof error !== 'object') {
+    return 0;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  if (typeof status === 'number' && Number.isFinite(status)) {
+    return status;
+  }
+
+  const responseStatus = (error as { response?: { status?: unknown } }).response?.status;
+  if (typeof responseStatus === 'number' && Number.isFinite(responseStatus)) {
+    return responseStatus;
+  }
+
+  return 0;
+}
 
 /**
  * DeepSeek API 客户端
@@ -38,9 +58,11 @@ class DeepSeekClient {
     }
   ): Promise<{ content: string; usage: TokenUsage }> {
     const startTime = Date.now();
+    const traceId = getTraceIdFromContext();
     
     try {
       logger.debug('DeepSeek chat request', {
+        trace_id: traceId,
         model: this.model,
         messageCount: messages.length,
         temperature: options?.temperature ?? this.temperature,
@@ -72,14 +94,27 @@ class DeepSeekClient {
         totalTokens: response.usage?.total_tokens || 0,
       };
 
+      const duration = Date.now() - startTime;
+      recordDownstream('deepseek', 'chat', 200, duration);
+
       logger.info('DeepSeek chat completed', {
-        duration: Date.now() - startTime,
+        trace_id: traceId,
+        duration,
         usage,
       });
 
       return { content, usage };
     } catch (error) {
-      logger.error('DeepSeek chat error', { error });
+      const duration = Date.now() - startTime;
+      const statusCode = extractErrorStatus(error);
+      recordDownstream('deepseek', 'chat', statusCode, duration);
+
+      logger.error('DeepSeek chat error', {
+        trace_id: traceId,
+        status: statusCode,
+        duration,
+        error,
+      });
       throw error;
     }
   }

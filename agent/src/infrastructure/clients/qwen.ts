@@ -1,6 +1,8 @@
 import logger from '../../shared/utils/logger';
 import config from '../../config';
 import { getRequestApiKeys } from '../../shared/context/requestApiKeys';
+import { getTraceIdFromContext } from '../../shared/context/traceContext';
+import { recordDownstream } from '../../shared/observability/metrics';
 
 /**
  * 千问 API 客户端
@@ -26,8 +28,12 @@ class QwenClient {
    * 使用千问 text-embedding-v4 模型
    */
   async createEmbedding(text: string, overrideApiKey?: string): Promise<number[]> {
+    const startTime = Date.now();
+    const traceId = getTraceIdFromContext();
+    let statusCode = 0;
+
     try {
-      logger.debug('Creating embedding with Qwen', { textLength: text.length });
+      logger.debug('Creating embedding with Qwen', { trace_id: traceId, textLength: text.length });
 
       const runtimeApiKey = (overrideApiKey || getRequestApiKeys().embeddingApiKey || this.apiKey || '').trim();
       if (!runtimeApiKey) {
@@ -45,6 +51,7 @@ class QwenClient {
           input: text,
         }),
       });
+      statusCode = response.status;
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -53,12 +60,25 @@ class QwenClient {
 
       const data = await response.json() as { data?: Array<{ embedding: number[] }> };
       const embedding = data.data?.[0]?.embedding || [];
+      const duration = Date.now() - startTime;
+      recordDownstream('qwen', 'embedding', statusCode, duration);
       
-      logger.debug('Embedding created with Qwen', { dimension: embedding.length });
+      logger.debug('Embedding created with Qwen', {
+        trace_id: traceId,
+        duration,
+        dimension: embedding.length,
+      });
       
       return embedding;
     } catch (error) {
-      logger.error('Qwen embedding creation error', { error });
+      const duration = Date.now() - startTime;
+      recordDownstream('qwen', 'embedding', statusCode, duration);
+      logger.error('Qwen embedding creation error', {
+        trace_id: traceId,
+        status: statusCode,
+        duration,
+        error,
+      });
       throw error;
     }
   }
@@ -68,8 +88,12 @@ class QwenClient {
    * 使用千问 text-embedding-v4 模型
    */
   async createEmbeddings(texts: string[], overrideApiKey?: string): Promise<number[][]> {
+    const startTime = Date.now();
+    const traceId = getTraceIdFromContext();
+    let statusCode = 0;
+
     try {
-      logger.debug('Creating batch embeddings with Qwen', { count: texts.length });
+      logger.debug('Creating batch embeddings with Qwen', { trace_id: traceId, count: texts.length });
 
       const runtimeApiKey = (overrideApiKey || getRequestApiKeys().embeddingApiKey || this.apiKey || '').trim();
       if (!runtimeApiKey) {
@@ -87,6 +111,7 @@ class QwenClient {
           input: texts,
         }),
       });
+      statusCode = response.status;
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -95,15 +120,26 @@ class QwenClient {
 
       const data = await response.json() as { data?: Array<{ embedding: number[] }> };
       const embeddings = data.data?.map((d) => d.embedding) || [];
+      const duration = Date.now() - startTime;
+      recordDownstream('qwen', 'embedding_batch', statusCode, duration);
       
       logger.debug('Batch embeddings created with Qwen', {
+        trace_id: traceId,
+        duration,
         count: embeddings.length,
         dimension: embeddings[0]?.length || 0,
       });
       
       return embeddings;
     } catch (error) {
-      logger.error('Qwen batch embedding creation error', { error });
+      const duration = Date.now() - startTime;
+      recordDownstream('qwen', 'embedding_batch', statusCode, duration);
+      logger.error('Qwen batch embedding creation error', {
+        trace_id: traceId,
+        status: statusCode,
+        duration,
+        error,
+      });
       throw error;
     }
   }

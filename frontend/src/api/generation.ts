@@ -1,5 +1,5 @@
 import axios from 'axios';
-import api, { agentApi } from './index';
+import api, { agentApi, buildTraceHeaders } from './index';
 import { useAuthStore } from '@/stores/auth';
 import type { 
   GenerateLessonRequest, 
@@ -65,6 +65,7 @@ export function streamGenerateLesson(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...buildTraceHeaders(),
       ...getApiKeyHeaders(),
     },
     body: JSON.stringify(request),

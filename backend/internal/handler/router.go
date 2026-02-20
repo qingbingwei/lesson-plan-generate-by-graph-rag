@@ -87,6 +87,7 @@ func (r *Router) Setup(engine *gin.Engine) {
 
 	// 健康检查
 	engine.GET("/health", HealthCheck)
+	engine.GET("/metrics", Metrics)
 
 	// API v1
 	v1 := engine.Group("/api/v1")
