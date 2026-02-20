@@ -114,6 +114,10 @@ build-agent: ## 构建智能体
 build-frontend: ## 构建前端
 	cd frontend && npm run build
 
+.PHONY: smoke
+smoke: ## 运行核心链路 smoke 测试（登录/生成/保存/上传）
+	node scripts/smoke-test.mjs
+
 .PHONY: docker-build
 docker-build: ## 构建所有Docker镜像
 	docker-compose build

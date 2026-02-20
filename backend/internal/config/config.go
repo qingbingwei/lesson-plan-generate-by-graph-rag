@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -271,4 +272,117 @@ func (c *Config) IsDevelopment() bool {
 // IsProduction 是否生产环境
 func (c *Config) IsProduction() bool {
 	return c.App.Env == "production"
+}
+
+// Validate 校验关键配置，避免服务在错误配置下启动
+func (c *Config) Validate() error {
+	var errs []string
+
+	if c.App.Port <= 0 || c.App.Port > 65535 {
+		errs = append(errs, "app.port 必须在 1~65535")
+	}
+
+	jwtSecret := strings.TrimSpace(c.JWT.Secret)
+	if jwtSecret == "" {
+		errs = append(errs, "jwt.secret 不能为空")
+	} else {
+		if len(jwtSecret) < 16 {
+			errs = append(errs, "jwt.secret 长度至少为 16")
+		}
+		if looksLikePlaceholder(jwtSecret) {
+			errs = append(errs, "jwt.secret 仍是占位值，请在 .env 中设置真实密钥")
+		}
+	}
+
+	if strings.TrimSpace(c.Database.Postgres.Host) == "" {
+		errs = append(errs, "database.postgres.host 不能为空")
+	}
+	if c.Database.Postgres.Port <= 0 || c.Database.Postgres.Port > 65535 {
+		errs = append(errs, "database.postgres.port 必须在 1~65535")
+	}
+	if strings.TrimSpace(c.Database.Postgres.User) == "" {
+		errs = append(errs, "database.postgres.user 不能为空")
+	}
+	if strings.TrimSpace(c.Database.Postgres.Name) == "" {
+		errs = append(errs, "database.postgres.name 不能为空")
+	}
+	if strings.TrimSpace(c.Database.Postgres.Password) == "" {
+		errs = append(errs, "database.postgres.password 不能为空")
+	}
+
+	if strings.TrimSpace(c.Database.Neo4j.URI) == "" {
+		errs = append(errs, "database.neo4j.uri 不能为空")
+	} else if !isValidURL(c.Database.Neo4j.URI, "bolt", "neo4j", "neo4j+s", "neo4j+ssc") {
+		errs = append(errs, "database.neo4j.uri 格式无效，需使用 bolt:// 或 neo4j://")
+	}
+	if strings.TrimSpace(c.Database.Neo4j.User) == "" {
+		errs = append(errs, "database.neo4j.user 不能为空")
+	}
+	if strings.TrimSpace(c.Database.Neo4j.Password) == "" {
+		errs = append(errs, "database.neo4j.password 不能为空")
+	}
+
+	if strings.TrimSpace(c.Database.Redis.Host) == "" {
+		errs = append(errs, "database.redis.host 不能为空")
+	}
+	if c.Database.Redis.Port <= 0 || c.Database.Redis.Port > 65535 {
+		errs = append(errs, "database.redis.port 必须在 1~65535")
+	}
+
+	if strings.TrimSpace(c.Agent.URL) == "" {
+		errs = append(errs, "agent.url 不能为空")
+	} else if !isValidURL(c.Agent.URL, "http", "https") {
+		errs = append(errs, "agent.url 格式无效，需使用 http:// 或 https://")
+	}
+	if c.Agent.Timeout <= 0 {
+		errs = append(errs, "agent.timeout 必须大于 0")
+	}
+
+	if c.RateLimit.Enabled {
+		if c.RateLimit.RequestsPerSecond <= 0 {
+			errs = append(errs, "rate_limit.requests_per_second 必须大于 0")
+		}
+		if c.RateLimit.Burst <= 0 {
+			errs = append(errs, "rate_limit.burst 必须大于 0")
+		}
+	}
+
+	if c.Upload.MaxSize <= 0 {
+		errs = append(errs, "upload.max_size 必须大于 0")
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("配置校验失败:\n- %s", strings.Join(errs, "\n- "))
+	}
+
+	return nil
+}
+
+func isValidURL(raw string, schemes ...string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return false
+	}
+
+	if len(schemes) == 0 {
+		return true
+	}
+
+	for _, scheme := range schemes {
+		if strings.EqualFold(parsed.Scheme, scheme) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func looksLikePlaceholder(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	return strings.Contains(lower, "change-in-production") ||
+		strings.Contains(lower, "your-secret") ||
+		strings.Contains(lower, "replace-me")
 }

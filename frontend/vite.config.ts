@@ -13,37 +13,50 @@ export default defineConfig(({ mode }) => {
 
   return {
     envDir: '..',
-  plugins: [vue()],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: backendTarget,
-        changeOrigin: true,
-      },
-      '/agent': {
-        target: agentTarget,
-        changeOrigin: true,
-        rewrite: (path: string) => path.replace(/^\/agent/, '/api'),
+    plugins: [vue()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
       },
     },
-  },
-  build: {
-    outDir: 'dist',
-    sourcemap: true,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['vue', 'vue-router', 'pinia'],
-          d3: ['d3'],
+    server: {
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: backendTarget,
+          changeOrigin: true,
+        },
+        '/agent': {
+          target: agentTarget,
+          changeOrigin: true,
+          rewrite: (path: string) => path.replace(/^\/agent/, '/api'),
         },
       },
     },
-  },
+    build: {
+      outDir: 'dist',
+      sourcemap: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+
+            if (id.includes('node_modules/d3')) return 'd3';
+            if (id.includes('node_modules/marked')) return 'markdown';
+            if (id.includes('node_modules/@element-plus/icons-vue')) {
+              return 'element-plus-icons';
+            }
+            if (id.includes('node_modules/element-plus')) return 'element-plus';
+            if (id.includes('node_modules/dayjs')) return 'dayjs';
+            if (id.includes('node_modules/axios')) return 'axios';
+            if (id.includes('node_modules/@vueuse/core')) return 'vueuse';
+
+            return 'vendor';
+          },
+        },
+      },
+      // P0 阶段先完成主入口拆分，后续可继续做 Element Plus 按需加载。
+      chunkSizeWarningLimit: 800,
+    },
   };
 });

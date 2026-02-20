@@ -27,6 +27,10 @@ func main() {
 		fmt.Printf("Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Printf("Invalid config: %v\n", err)
+		os.Exit(1)
+	}
 
 	// 初始化日志
 	logCfg := &logger.Config{
