@@ -16,6 +16,28 @@ if [ -f "$ENV_FILE" ]; then
     set +a
 fi
 
+looks_like_placeholder_secret() {
+    local value
+    value="$(echo "${1:-}" | tr '[:upper:]' '[:lower:]')"
+
+    if [ -z "$value" ]; then
+        return 0
+    fi
+
+    case "$value" in
+        your-*|*change-in-production*|*replace-me*|*changeme*)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+if looks_like_placeholder_secret "${JWT_SECRET:-}"; then
+    export JWT_SECRET="lesson-plan-dev-jwt-secret-2026-local"
+    echo "[WARN] 检测到 JWT_SECRET 为空或占位值，已自动注入本地开发密钥"
+fi
+
 AGENT_PORT="${AGENT_PORT:-${PORT:-13001}}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 BACKEND_STARTUP_TIMEOUT="${BACKEND_STARTUP_TIMEOUT:-30}"
