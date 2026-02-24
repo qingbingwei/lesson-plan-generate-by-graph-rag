@@ -12,6 +12,47 @@ import type {
   PaginationParams,
 } from '@/types';
 
+type RawLesson = Lesson & {
+  user_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  key_points?: string[];
+  difficult_points?: string[];
+  teaching_methods?: string[];
+};
+
+type RawPaginatedLessonResponse = {
+  items: RawLesson[];
+  total: number;
+  page: number;
+  page_size?: number;
+  pageSize?: number;
+  total_pages?: number;
+  totalPages?: number;
+};
+
+function normalizeLesson(raw: RawLesson): Lesson {
+  return {
+    ...raw,
+    userId: raw.userId || raw.user_id || '',
+    keyPoints: raw.keyPoints || raw.key_points || [],
+    difficultPoints: raw.difficultPoints || raw.difficult_points || [],
+    teachingMethods: raw.teachingMethods || raw.teaching_methods || [],
+    createdAt: raw.createdAt || raw.created_at || '',
+    updatedAt: raw.updatedAt || raw.updated_at || '',
+  } as Lesson;
+}
+
+function normalizeLessonPage(raw: RawPaginatedLessonResponse): PaginatedResponse<Lesson> {
+  return {
+    items: (raw.items || []).map(normalizeLesson),
+    total: raw.total || 0,
+    page: raw.page || 1,
+    pageSize: raw.pageSize || raw.page_size || 10,
+    totalPages: raw.totalPages || raw.total_pages || 1,
+  };
+}
+
 /**
  * 获取教案列表
  */
@@ -23,32 +64,32 @@ export async function getLessons(
     keyword?: string;
   }
 ): Promise<PaginatedResponse<Lesson>> {
-  const response = await api.get<ApiResponse<PaginatedResponse<Lesson>>>('/lessons', { params });
-  return response.data.data;
+  const response = await api.get<ApiResponse<RawPaginatedLessonResponse>>('/lessons', { params });
+  return normalizeLessonPage(response.data.data);
 }
 
 /**
  * 获取教案详情
  */
 export async function getLesson(id: string): Promise<Lesson> {
-  const response = await api.get<ApiResponse<Lesson>>(`/lessons/${id}`);
-  return response.data.data;
+  const response = await api.get<ApiResponse<RawLesson>>(`/lessons/${id}`);
+  return normalizeLesson(response.data.data);
 }
 
 /**
  * 创建教案
  */
 export async function createLesson(data: Partial<Lesson>): Promise<Lesson> {
-  const response = await api.post<ApiResponse<Lesson>>('/lessons', data);
-  return response.data.data;
+  const response = await api.post<ApiResponse<RawLesson>>('/lessons', data);
+  return normalizeLesson(response.data.data);
 }
 
 /**
  * 更新教案
  */
 export async function updateLesson(id: string, data: Partial<Lesson>): Promise<Lesson> {
-  const response = await api.put<ApiResponse<Lesson>>(`/lessons/${id}`, data);
-  return response.data.data;
+  const response = await api.put<ApiResponse<RawLesson>>(`/lessons/${id}`, data);
+  return normalizeLesson(response.data.data);
 }
 
 /**
@@ -85,8 +126,8 @@ export async function getLessonVersion(lessonId: string, version: number): Promi
  * 回滚到指定版本
  */
 export async function rollbackToVersion(lessonId: string, version: number): Promise<Lesson> {
-  const response = await api.post<ApiResponse<Lesson>>(`/lessons/${lessonId}/versions/${version}/rollback`);
-  return response.data.data;
+  const response = await api.post<ApiResponse<RawLesson>>(`/lessons/${lessonId}/versions/${version}/rollback`);
+  return normalizeLesson(response.data.data);
 }
 
 /**

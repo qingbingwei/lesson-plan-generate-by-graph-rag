@@ -79,6 +79,20 @@ function handlePageChange(page: number) {
   lessonStore.fetchLessons({ page });
 }
 
+function formatCreatedDate(row: { createdAt?: string; created_at?: string }): string {
+  const raw = row.createdAt || row.created_at;
+  if (!raw) {
+    return '-';
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+
+  return date.toLocaleDateString('zh-CN');
+}
+
 onMounted(() => {
   loadFavorites();
   lessonStore.fetchLessons();
@@ -149,7 +163,7 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="创建时间" width="130">
           <template #default="{ row }">
-            {{ new Date(row.createdAt).toLocaleDateString() }}
+            {{ formatCreatedDate(row) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">

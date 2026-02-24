@@ -403,39 +403,45 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="flex flex-wrap gap-2 items-center export-menu">
-              <el-button :icon="isFavorite ? StarFilled : Star" @click="toggleFavorite">
-                {{ isFavorite ? '已收藏' : '收藏' }}
-              </el-button>
-              <el-button v-if="lesson.status === 'draft'" type="success" :icon="Upload" :loading="publishing" @click="handlePublish">
-                发布
-              </el-button>
-              <el-button :icon="Edit" @click="router.push(`/lessons/${lesson.id}/edit`)">编辑</el-button>
-              <el-button :loading="qualityLoading" @click="runQualityReview">质量审查</el-button>
+            <div class="action-panel">
+              <div class="action-row action-row--primary">
+                <el-button :icon="isFavorite ? StarFilled : Star" @click="toggleFavorite">
+                  {{ isFavorite ? '已收藏' : '收藏' }}
+                </el-button>
+                <el-button :icon="Edit" @click="router.push(`/lessons/${lesson.id}/edit`)">编辑</el-button>
+                <el-button :loading="qualityLoading" @click="runQualityReview">质量审查</el-button>
+                <el-button v-if="lesson.status === 'draft'" type="success" :icon="Upload" :loading="publishing" @click="handlePublish">
+                  发布
+                </el-button>
+              </div>
 
-              <el-select v-model="selectedExportLayout" class="w-[140px]" size="default">
-                <el-option
-                  v-for="item in exportLayouts"
-                  :key="item.id"
-                  :label="item.name"
-                  :value="item.id"
-                />
-              </el-select>
+              <div class="action-row action-row--secondary">
+                <div class="export-menu export-controls">
+                  <el-select v-model="selectedExportLayout" class="export-layout-select" size="default">
+                    <el-option
+                      v-for="item in exportLayouts"
+                      :key="item.id"
+                      :label="item.name"
+                      :value="item.id"
+                    />
+                  </el-select>
 
-              <el-dropdown trigger="click" @visible-change="(v:boolean)=>showExportMenu=v">
-                <el-button :icon="Download" :loading="exporting">导出</el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="handleExport('md')">Markdown (.md)</el-dropdown-item>
-                    <el-dropdown-item @click="handleExport('docx')">Word (.docx)</el-dropdown-item>
-                    <el-dropdown-item @click="handleExport('pdf')">PDF (.pdf)</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+                  <el-dropdown trigger="click" @visible-change="(v:boolean)=>showExportMenu=v">
+                    <el-button :icon="Download" :loading="exporting">导出</el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item @click="handleExport('md')">Markdown (.md)</el-dropdown-item>
+                        <el-dropdown-item @click="handleExport('docx')">Word (.docx)</el-dropdown-item>
+                        <el-dropdown-item @click="handleExport('pdf')">PDF (.pdf)</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
 
-              <el-button :icon="Clock" @click="toggleVersionPanel">版本历史</el-button>
-              <el-button :icon="Share">分享</el-button>
-              <el-button type="danger" :icon="Delete" @click="handleDelete">删除</el-button>
+                <el-button :icon="Clock" @click="toggleVersionPanel">版本历史</el-button>
+                <el-button :icon="Share">分享</el-button>
+                <el-button type="danger" :icon="Delete" @click="handleDelete">删除</el-button>
+              </div>
             </div>
           </div>
         </div>
@@ -708,6 +714,34 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.action-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.export-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 12px;
+  background: var(--el-fill-color-lighter);
+}
+
+.export-layout-select {
+  width: 168px;
+}
+
 .version-item {
   border: 1px solid var(--el-border-color-lighter);
 }
@@ -750,5 +784,25 @@ onUnmounted(() => {
   border-radius: 6px;
   padding: 10px;
   background: var(--el-fill-color-light);
+}
+
+@media (max-width: 1280px) {
+  .action-panel {
+    align-items: stretch;
+  }
+
+  .action-row {
+    justify-content: flex-start;
+  }
+
+  .export-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .export-layout-select {
+    min-width: 150px;
+    width: 60%;
+  }
 }
 </style>
