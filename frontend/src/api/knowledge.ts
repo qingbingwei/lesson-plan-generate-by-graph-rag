@@ -16,11 +16,6 @@ export interface KnowledgeDocument {
   updatedAt: string;
 }
 
-export interface DocumentListResponse {
-  documents: KnowledgeDocument[];
-  total: number;
-}
-
 /** 上传文档 */
 export function uploadDocument(formData: FormData, onProgress?: (percent: number) => void) {
   return api.post('/knowledge/documents', formData, {
@@ -43,28 +38,14 @@ export function listDocuments(page = 1, pageSize = 20) {
   });
 }
 
-/** 获取文档详情 */
-export function getDocument(id: string) {
-  return api.get<{ data: KnowledgeDocument }>(`/knowledge/documents/${id}`);
-}
-
 /** 删除文档 */
 export function deleteDocument(id: string) {
   return api.delete(`/knowledge/documents/${id}`);
-}
-
-/** 获取文档处理状态 */
-export function getDocumentStatus(id: string) {
-  return api.get<{ data: { status: string; entityCount: number; relationCount: number } }>(
-    `/knowledge/documents/${id}/status`
-  );
 }
 
 // 保持向后兼容的命名空间导出
 export const knowledgeApi = {
   uploadDocument,
   listDocuments,
-  getDocument,
   deleteDocument,
-  getDocumentStatus,
 };
