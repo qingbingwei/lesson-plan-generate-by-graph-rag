@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useLessonStore } from '@/stores/lesson';
 import {
@@ -23,6 +23,7 @@ import {
   StarFilled,
   Upload,
   Back,
+  InfoFilled,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
@@ -45,7 +46,6 @@ const diffDialogVisible = ref(false);
 const diffLoading = ref(false);
 const versionDiff = ref<LessonVersionDiff | null>(null);
 
-const showExportMenu = ref(false);
 const exporting = ref(false);
 const exportLayouts = ref<ExportLayout[]>([]);
 const selectedExportLayout = ref('standard');
@@ -275,13 +275,6 @@ function parseDownloadFilename(contentDisposition: string | null, fallback: stri
   return fallback;
 }
 
-function handleClickOutside(event: MouseEvent) {
-  const target = event.target as HTMLElement;
-  if (!target.closest('.export-menu')) {
-    showExportMenu.value = false;
-  }
-}
-
 async function handleDelete() {
   try {
     await ElMessageBox.confirm('确定要删除这个教案吗？', '删除确认', {
@@ -313,7 +306,6 @@ async function handlePublish() {
 async function handleExport(format: 'md' | 'pdf' | 'docx') {
   if (!lesson.value) return;
 
-  showExportMenu.value = false;
   exporting.value = true;
 
   try {
@@ -371,11 +363,6 @@ onMounted(() => {
   loadFavorites();
   lessonStore.fetchLesson(lessonId.value);
   loadExportLayouts();
-  document.addEventListener('click', handleClickOutside);
-});
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside);
 });
 </script>
 
@@ -403,8 +390,8 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="action-panel">
-              <div class="action-row action-row--primary">
+            <div class="action-toolbar">
+              <div class="action-row action-row--main">
                 <el-button :icon="isFavorite ? StarFilled : Star" @click="toggleFavorite">
                   {{ isFavorite ? '已收藏' : '收藏' }}
                 </el-button>
@@ -413,10 +400,16 @@ onUnmounted(() => {
                 <el-button v-if="lesson.status === 'draft'" type="success" :icon="Upload" :loading="publishing" @click="handlePublish">
                   发布
                 </el-button>
+                <el-button :icon="Clock" @click="toggleVersionPanel">版本历史</el-button>
+                <el-button type="danger" :icon="Delete" @click="handleDelete">删除</el-button>
               </div>
 
               <div class="action-row action-row--secondary">
-                <div class="export-menu export-controls">
+                <div class="toolbar-group export-menu">
+                  <span class="export-label">导出模板</span>
+                  <el-tooltip content="仅影响导出文件样式，不影响页面显示" placement="top">
+                    <el-icon class="export-tip-icon"><InfoFilled /></el-icon>
+                  </el-tooltip>
                   <el-select v-model="selectedExportLayout" class="export-layout-select" size="default">
                     <el-option
                       v-for="item in exportLayouts"
@@ -425,8 +418,7 @@ onUnmounted(() => {
                       :value="item.id"
                     />
                   </el-select>
-
-                  <el-dropdown trigger="click" @visible-change="(v:boolean)=>showExportMenu=v">
+                  <el-dropdown trigger="click">
                     <el-button :icon="Download" :loading="exporting">导出</el-button>
                     <template #dropdown>
                       <el-dropdown-menu>
@@ -437,10 +429,7 @@ onUnmounted(() => {
                     </template>
                   </el-dropdown>
                 </div>
-
-                <el-button :icon="Clock" @click="toggleVersionPanel">版本历史</el-button>
                 <el-button :icon="Share">分享</el-button>
-                <el-button type="danger" :icon="Delete" @click="handleDelete">删除</el-button>
               </div>
             </div>
           </div>
@@ -714,32 +703,66 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.action-panel {
+.action-toolbar {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 10px;
+  width: min(100%, 860px);
+  gap: 8px;
 }
 
 .action-row {
   display: flex;
-  flex-wrap: wrap;
+  width: 100%;
+  align-items: center;
   gap: 8px;
   justify-content: flex-end;
 }
 
-.export-controls {
+.toolbar-group {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 12px;
-  background: var(--el-fill-color-lighter);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.action-row--main,
+.action-row--secondary {
+  flex-wrap: nowrap;
 }
 
 .export-layout-select {
   width: 168px;
+}
+
+.export-label {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.export-tip-icon {
+  font-size: 14px;
+  color: var(--el-color-info);
+  cursor: help;
+}
+
+.export-menu {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.action-toolbar :deep(.el-select__wrapper) {
+  min-height: 38px;
+  background: var(--el-bg-color);
+}
+
+.action-toolbar :deep(.el-button) {
+  height: 40px;
 }
 
 .version-item {
@@ -787,22 +810,29 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1280px) {
-  .action-panel {
+  .action-toolbar {
     align-items: stretch;
   }
 
   .action-row {
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
-  .export-controls {
+  .toolbar-group {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
   }
 
   .export-layout-select {
-    min-width: 150px;
-    width: 60%;
+    min-width: 180px;
+    width: 65%;
   }
+
+  .action-row--main,
+  .action-row--secondary {
+    flex-wrap: wrap;
+  }
+
 }
 </style>
