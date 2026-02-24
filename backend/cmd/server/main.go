@@ -94,7 +94,7 @@ func main() {
 	// 初始化Service
 	authService := service.NewAuthService(userRepo, jwtManager)
 	userService := service.NewUserService(userRepo, lessonRepo, favoriteRepo)
-	lessonService := service.NewLessonService(lessonRepo, favoriteRepo, likeRepo, versionRepo)
+	lessonService := service.NewLessonService(lessonRepo, favoriteRepo, likeRepo, versionRepo, &cfg.Agent)
 	commentService := service.NewCommentService(commentRepo, lessonRepo)
 	favoriteService := service.NewFavoriteService(favoriteRepo, lessonRepo)
 	likeService := service.NewLikeService(likeRepo, lessonRepo)

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
+	"lesson-plan/backend/internal/config"
 	"lesson-plan/backend/internal/model"
 	"lesson-plan/backend/internal/repository"
 
@@ -72,6 +74,8 @@ type lessonService struct {
 	favoriteRepo repository.FavoriteRepository
 	likeRepo     repository.LikeRepository
 	versionRepo  repository.VersionRepository
+	cfg          *config.AgentConfig
+	httpClient   *http.Client
 }
 
 // NewLessonService 创建教案服务
@@ -80,12 +84,20 @@ func NewLessonService(
 	favoriteRepo repository.FavoriteRepository,
 	likeRepo repository.LikeRepository,
 	versionRepo repository.VersionRepository,
+	cfg *config.AgentConfig,
 ) LessonService {
+	var httpClient *http.Client
+	if cfg != nil {
+		httpClient = newAgentHTTPClient(cfg)
+	}
+
 	return &lessonService{
 		lessonRepo:   lessonRepo,
 		favoriteRepo: favoriteRepo,
 		likeRepo:     likeRepo,
 		versionRepo:  versionRepo,
+		cfg:          cfg,
+		httpClient:   httpClient,
 	}
 }
 

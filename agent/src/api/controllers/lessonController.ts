@@ -84,6 +84,188 @@ type AssistantChatRequest = {
   userId?: string;
 };
 
+type QualityReviewRequest = {
+  lessonId?: string;
+  title?: string;
+  subject?: string;
+  grade?: string;
+  duration?: number;
+  objectives?: string;
+  content?: string;
+  activities?: string;
+  assessment?: string;
+  resources?: string;
+};
+
+type QualityReviewDimension = {
+  key: string;
+  name: string;
+  score: number;
+  max_score: number;
+  comment: string;
+  importance: number;
+};
+
+type QualityReviewResult = {
+  lesson_id: string;
+  total_score: number;
+  max_score: number;
+  grade: string;
+  dimensions: QualityReviewDimension[];
+  issues: string[];
+  suggestions: string[];
+  auto_approved: boolean;
+};
+
+const QUALITY_DIMENSION_MAX_SCORE: Record<string, number> = {
+  completeness: 25,
+  objective_clarity: 20,
+  activity_design: 20,
+  assessment_alignment: 15,
+  resource_support: 10,
+  time_feasibility: 10,
+};
+
+function toText(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim();
+}
+
+function toStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map(item => (typeof item === 'string' ? item.trim() : ''))
+    .filter(item => item.length > 0);
+}
+
+function toFiniteInt(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.round(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
+function qualityGradeByScore(totalScore: number): string {
+  if (totalScore >= 85) return 'A';
+  if (totalScore >= 70) return 'B';
+  if (totalScore >= 55) return 'C';
+  return 'D';
+}
+
+function normalizeQualityReviewResult(input: QualityReviewResult, lessonId: string): QualityReviewResult {
+  const rawDimensions = Array.isArray(input.dimensions) ? input.dimensions : [];
+
+  const dimensions: QualityReviewDimension[] = rawDimensions.map((dimension, index) => {
+    const key = toText(dimension.key) || `dimension_${index + 1}`;
+    const fallbackMax = QUALITY_DIMENSION_MAX_SCORE[key] ?? 10;
+    const maxScore = clamp(toFiniteInt(dimension.max_score, fallbackMax), 1, 100);
+    const score = clamp(toFiniteInt(dimension.score, 0), 0, maxScore);
+    const importance = clamp(toFiniteInt(dimension.importance, 3), 1, 5);
+    const name = toText(dimension.name) || `维度${index + 1}`;
+    const comment = toText(dimension.comment) || '该维度评分由 Agent 生成。';
+
+    return {
+      key,
+      name,
+      score,
+      max_score: maxScore,
+      comment,
+      importance,
+    };
+  });
+
+  const finalDimensions = dimensions.length > 0
+    ? dimensions
+    : [
+        {
+          key: 'completeness',
+          name: '内容完整度',
+          score: 0,
+          max_score: 25,
+          comment: '未返回有效维度评分。',
+          importance: 5,
+        },
+      ];
+
+  const totalScore = finalDimensions.reduce((sum, item) => sum + item.score, 0);
+  const maxScore = finalDimensions.reduce((sum, item) => sum + item.max_score, 0);
+  const issues = toStringList(input.issues);
+  const suggestions = toStringList(input.suggestions);
+
+  return {
+    lesson_id: lessonId,
+    total_score: totalScore,
+    max_score: maxScore,
+    grade: qualityGradeByScore(totalScore),
+    dimensions: finalDimensions,
+    issues: issues.length > 0 ? issues : ['未发现明显结构性问题。'],
+    suggestions:
+      suggestions.length > 0
+        ? suggestions
+        : [totalScore >= 75 ? '整体质量较好，可进入人工抽检或直接发布。' : '建议根据低分维度逐项修订后再发布。'],
+    auto_approved: totalScore >= 75,
+  };
+}
+
+function buildQualityReviewPrompt(request: QualityReviewRequest): string {
+  const subject = toText(request.subject) || '未知学科';
+  const grade = toText(request.grade) || '未知年级';
+  const title = toText(request.title) || '未命名教案';
+  const duration = toFiniteInt(request.duration, 0);
+  const objectives = toText(request.objectives) || '(空)';
+  const content = toText(request.content) || '(空)';
+  const activities = toText(request.activities) || '(空)';
+  const assessment = toText(request.assessment) || '(空)';
+  const resources = toText(request.resources) || '(空)';
+
+  return `请对以下教案进行质量评分，必须给出有区分度的分数，禁止默认满分：
+
+课题：${title}
+学科：${subject}
+年级：${grade}
+课时：${duration} 分钟
+
+教学目标：
+${objectives}
+
+教学内容：
+${content}
+
+教学活动：
+${activities}
+
+教学评价：
+${assessment}
+
+教学资源：
+${resources}
+
+评分要求：
+1. 输出 6 个维度：completeness, objective_clarity, activity_design, assessment_alignment, resource_support, time_feasibility。
+2. 每个维度打分必须在 0 到 max_score 之间，且需结合文本质量而非仅关键词命中。
+3. total_score 与 max_score 必须是维度分数求和。
+4. issues 和 suggestions 至少各 1 条，内容具体可执行。`;
+}
+
 const ASSISTANT_SYSTEM_PROMPT = `你是“智能教案生成系统”的 AI 助手，必须围绕本项目提供帮助。
 
 你的能力边界：
@@ -694,6 +876,113 @@ export async function chatAssistant(req: Request, res: Response) {
     });
   } catch (error) {
     logger.error('Assistant chat error', { error });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+export async function reviewLessonQuality(req: Request, res: Response) {
+  try {
+    const request = req.body as QualityReviewRequest;
+    const lessonId = toText(request.lessonId);
+
+    if (!lessonId) {
+      res.status(400).json({
+        success: false,
+        error: '缺少必要参数：lessonId',
+      });
+      return;
+    }
+
+    const schema = `{
+  "lesson_id": "string",
+  "total_score": 0,
+  "max_score": 100,
+  "grade": "A|B|C|D",
+  "dimensions": [
+    {
+      "key": "completeness",
+      "name": "内容完整度",
+      "score": 0,
+      "max_score": 25,
+      "comment": "评分说明",
+      "importance": 5
+    },
+    {
+      "key": "objective_clarity",
+      "name": "目标清晰度",
+      "score": 0,
+      "max_score": 20,
+      "comment": "评分说明",
+      "importance": 5
+    },
+    {
+      "key": "activity_design",
+      "name": "活动设计",
+      "score": 0,
+      "max_score": 20,
+      "comment": "评分说明",
+      "importance": 4
+    },
+    {
+      "key": "assessment_alignment",
+      "name": "评价对齐度",
+      "score": 0,
+      "max_score": 15,
+      "comment": "评分说明",
+      "importance": 4
+    },
+    {
+      "key": "resource_support",
+      "name": "资源支撑",
+      "score": 0,
+      "max_score": 10,
+      "comment": "评分说明",
+      "importance": 3
+    },
+    {
+      "key": "time_feasibility",
+      "name": "课时可执行性",
+      "score": 0,
+      "max_score": 10,
+      "comment": "评分说明",
+      "importance": 3
+    }
+  ],
+  "issues": ["问题1"],
+  "suggestions": ["建议1"],
+  "auto_approved": false
+}`;
+
+    const prompt = buildQualityReviewPrompt(request);
+    const apiKeyOverrides = resolveApiKeyOverrides(req);
+
+    const { data, usage } = await withRequestApiKeys(apiKeyOverrides, async () => {
+      const deepseek = getDeepSeekClient();
+      return deepseek.structuredChat<QualityReviewResult>(
+        [
+          {
+            role: 'system',
+            content: '你是资深教学督导专家，负责教案质量评分。评分必须客观、有区分度，不能为了通过而给高分。',
+          },
+          { role: 'user', content: prompt },
+        ],
+        schema,
+        { temperature: 0.2, maxTokens: 1800 }
+      );
+    });
+
+    const normalized = normalizeQualityReviewResult(data, lessonId);
+
+    res.json({
+      success: true,
+      data: normalized,
+      usage,
+    });
+  } catch (error) {
+    logger.error('Review lesson quality error', { error });
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error',

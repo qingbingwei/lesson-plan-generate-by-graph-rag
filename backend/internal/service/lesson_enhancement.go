@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
 	"lesson-plan/backend/internal/model"
+	"lesson-plan/backend/pkg/logger"
 
 	"github.com/google/uuid"
 )
@@ -54,6 +56,155 @@ type LessonVersionDiff struct {
 	ToVersion     string             `json:"to_version"`
 	ChangedFields int                `json:"changed_fields"`
 	Fields        []VersionDiffField `json:"fields"`
+}
+
+type agentLessonQualityReviewRequest struct {
+	LessonID   string `json:"lessonId"`
+	Title      string `json:"title"`
+	Subject    string `json:"subject"`
+	Grade      string `json:"grade"`
+	Duration   int    `json:"duration"`
+	Objectives string `json:"objectives"`
+	Content    string `json:"content"`
+	Activities string `json:"activities"`
+	Assessment string `json:"assessment"`
+	Resources  string `json:"resources"`
+}
+
+type agentLessonQualityReviewResponse struct {
+	Success bool                 `json:"success"`
+	Data    *LessonQualityReview `json:"data"`
+	Error   string               `json:"error,omitempty"`
+}
+
+func calculateQualityGrade(totalScore int) string {
+	switch {
+	case totalScore >= 85:
+		return "A"
+	case totalScore >= 70:
+		return "B"
+	case totalScore >= 55:
+		return "C"
+	default:
+		return "D"
+	}
+}
+
+func normalizeQualityReviewResult(review *LessonQualityReview) error {
+	if review == nil {
+		return errors.New("质量审查结果为空")
+	}
+	if len(review.Dimensions) == 0 {
+		return errors.New("质量审查维度为空")
+	}
+
+	totalScore := 0
+	maxScore := 0
+	for i := range review.Dimensions {
+		dimension := &review.Dimensions[i]
+		if dimension.MaxScore < 0 {
+			dimension.MaxScore = 0
+		}
+		if dimension.Score < 0 {
+			dimension.Score = 0
+		}
+		if dimension.MaxScore > 0 && dimension.Score > dimension.MaxScore {
+			dimension.Score = dimension.MaxScore
+		}
+		totalScore += dimension.Score
+		maxScore += dimension.MaxScore
+	}
+
+	if maxScore <= 0 {
+		return errors.New("质量审查最大分数无效")
+	}
+
+	review.TotalScore = totalScore
+	review.MaxScore = maxScore
+	review.Grade = calculateQualityGrade(totalScore)
+	review.AutoApproved = totalScore >= 75
+
+	if len(review.Issues) == 0 {
+		review.Issues = []string{"未发现明显结构性问题。"}
+	}
+	if len(review.Suggestions) == 0 {
+		if review.AutoApproved {
+			review.Suggestions = []string{"整体质量较好，可进入人工抽检或直接发布。"}
+		} else {
+			review.Suggestions = []string{"建议根据低分维度逐项修订后再发布。"}
+		}
+	}
+
+	return nil
+}
+
+func (s *lessonService) reviewQualityByAgent(ctx context.Context, lesson *model.Lesson) (*LessonQualityReview, error) {
+	if s.cfg == nil || strings.TrimSpace(s.cfg.URL) == "" || s.httpClient == nil {
+		return nil, errors.New("agent 评分服务未配置")
+	}
+
+	requestPayload := agentLessonQualityReviewRequest{
+		LessonID:   lesson.ID.String(),
+		Title:      strings.TrimSpace(lesson.Title),
+		Subject:    strings.TrimSpace(lesson.Subject),
+		Grade:      strings.TrimSpace(lesson.Grade),
+		Duration:   lesson.Duration,
+		Objectives: normalizeLessonText(lesson.Objectives),
+		Content:    normalizeLessonText(lesson.Content),
+		Activities: normalizeLessonText(lesson.Activities),
+		Assessment: normalizeLessonText(lesson.Assessment),
+		Resources:  normalizeLessonText(lesson.Resources),
+	}
+
+	body, err := json.Marshal(requestPayload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal quality review request failed: %w", err)
+	}
+
+	headers := map[string]string{
+		"Content-Type": "application/json",
+	}
+	if s.cfg.APIKey != "" {
+		headers["Authorization"] = "Bearer " + s.cfg.APIKey
+	}
+
+	url := fmt.Sprintf("%s/api/quality-review", strings.TrimRight(s.cfg.URL, "/"))
+	statusCode, respBody, err := doAgentRequestWithRetry(
+		ctx,
+		s.httpClient,
+		http.MethodPost,
+		url,
+		body,
+		headers,
+		"quality_review",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("call quality review endpoint failed: %w", err)
+	}
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("quality review endpoint returned error: %d - %s", statusCode, string(respBody))
+	}
+
+	var response agentLessonQualityReviewResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal quality review response failed: %w", err)
+	}
+	if !response.Success {
+		if strings.TrimSpace(response.Error) != "" {
+			return nil, errors.New(strings.TrimSpace(response.Error))
+		}
+		return nil, errors.New("quality review failed")
+	}
+	if response.Data == nil {
+		return nil, errors.New("quality review response is empty")
+	}
+
+	response.Data.LessonID = lesson.ID
+	if err := normalizeQualityReviewResult(response.Data); err != nil {
+		return nil, err
+	}
+
+	return response.Data, nil
 }
 
 func normalizeLessonText(raw string) string {
@@ -170,6 +321,17 @@ func (s *lessonService) ReviewQuality(ctx context.Context, lessonID uuid.UUID, u
 	}
 	if lesson.UserID != userID {
 		return nil, ErrUnauthorized
+	}
+
+	// 优先使用 Agent 进行语义评分；失败时回退本地规则评分，避免功能不可用。
+	if review, agentErr := s.reviewQualityByAgent(ctx, lesson); agentErr == nil {
+		return review, nil
+	} else {
+		logger.Warn(
+			"Agent quality review failed, fallback to rule-based scoring",
+			logger.String("lesson_id", lesson.ID.String()),
+			logger.Err(agentErr),
+		)
 	}
 
 	objectivesText := normalizeLessonText(lesson.Objectives)
@@ -341,15 +503,7 @@ func (s *lessonService) ReviewQuality(ctx context.Context, lessonID uuid.UUID, u
 		maxScore += dimension.MaxScore
 	}
 
-	grade := "D"
-	switch {
-	case totalScore >= 85:
-		grade = "A"
-	case totalScore >= 70:
-		grade = "B"
-	case totalScore >= 55:
-		grade = "C"
-	}
+	grade := calculateQualityGrade(totalScore)
 
 	autoApproved := totalScore >= 75
 	if autoApproved {

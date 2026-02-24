@@ -11,6 +11,7 @@ import {
   createEmbedding,
   getLangSmithTokenUsage,
   chatAssistant,
+  reviewLessonQuality,
 } from '../controllers/lessonController';
 import { snapshotMetrics } from '../../shared/observability/metrics';
 
@@ -32,6 +33,7 @@ router.get('/metrics', (_req, res) => {
 router.post('/api/generate', generateLesson);
 router.post('/api/generate/stream', streamGenerateLesson);
 router.post('/api/assistant/chat', chatAssistant);
+router.post('/api/quality-review', reviewLessonQuality);
 router.post('/api/regenerate-section', regenerateSection);
 router.post('/api/embedding', createEmbedding);
 
