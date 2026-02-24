@@ -37,20 +37,12 @@ type RetryRequestConfig = InternalAxiosRequestConfig & {
   _traceId?: string;
 };
 
-export function createTraceId(): string {
+function createTraceId(): string {
   if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function') {
     return globalThis.crypto.randomUUID();
   }
 
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export function buildTraceHeaders(traceId?: string): Record<string, string> {
-  const value = (traceId || createTraceId()).trim();
-  return {
-    [TRACE_ID_HEADER]: value,
-    [REQUEST_ID_HEADER]: value,
-  };
 }
 
 function readHeader(config: RetryRequestConfig, headerName: string): string | undefined {
