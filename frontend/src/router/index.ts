@@ -83,6 +83,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/TokenUsage.vue'),
         meta: { title: 'Token与密钥' },
       },
+      {
+        path: 'templates',
+        name: 'TemplateCenter',
+        component: () => import('@/views/TemplateCenter.vue'),
+        meta: { title: '模板库中心' },
+      },
 
       {
         path: 'help-docs',

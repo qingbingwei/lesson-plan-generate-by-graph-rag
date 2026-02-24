@@ -13,6 +13,7 @@ type Router struct {
 	authHandler       *AuthHandler
 	userHandler       *UserHandler
 	lessonHandler     *LessonHandler
+	templateHandler   *TemplateHandler
 	generationHandler *GenerationHandler
 	knowledgeHandler  *KnowledgeHandler
 	config            *config.Config
@@ -24,6 +25,7 @@ func NewRouter(
 	authHandler *AuthHandler,
 	userHandler *UserHandler,
 	lessonHandler *LessonHandler,
+	templateHandler *TemplateHandler,
 	generationHandler *GenerationHandler,
 	knowledgeHandler *KnowledgeHandler,
 	appConfig *config.Config,
@@ -33,6 +35,7 @@ func NewRouter(
 		authHandler:       authHandler,
 		userHandler:       userHandler,
 		lessonHandler:     lessonHandler,
+		templateHandler:   templateHandler,
 		generationHandler: generationHandler,
 		knowledgeHandler:  knowledgeHandler,
 		config:            appConfig,
@@ -119,6 +122,7 @@ func (r *Router) Setup(engine *gin.Engine) {
 			lessons.GET("/search", r.lessonHandler.Search)
 			lessons.GET("/:id", middleware.OptionalAuthMiddleware(r.jwtManager), r.lessonHandler.GetByID)
 			lessons.GET("/:id/comments", r.lessonHandler.ListComments)
+			lessons.GET("/export/layouts", middleware.OptionalAuthMiddleware(r.jwtManager), r.lessonHandler.ExportLayouts)
 			lessons.GET("/:id/export", middleware.OptionalAuthMiddleware(r.jwtManager), r.lessonHandler.Export)
 
 			// 需要认证的教案路由
@@ -131,7 +135,9 @@ func (r *Router) Setup(engine *gin.Engine) {
 				lessonsAuth.POST("/:id/publish", r.lessonHandler.Publish)
 				lessonsAuth.GET("/:id/versions", r.lessonHandler.ListVersions)
 				lessonsAuth.GET("/:id/versions/:version", r.lessonHandler.GetVersion)
+				lessonsAuth.GET("/:id/versions/diff", r.lessonHandler.DiffVersions)
 				lessonsAuth.POST("/:id/versions/:version/rollback", r.lessonHandler.RollbackToVersion)
+				lessonsAuth.GET("/:id/quality-review", r.lessonHandler.QualityReview)
 				lessonsAuth.POST("/:id/favorite", r.lessonHandler.AddFavorite)
 				lessonsAuth.DELETE("/:id/favorite", r.lessonHandler.RemoveFavorite)
 				lessonsAuth.POST("/:id/like", r.lessonHandler.Like)
@@ -185,6 +191,17 @@ func (r *Router) Setup(engine *gin.Engine) {
 				documents.DELETE("/:id", r.knowledgeHandler.DeleteDocument)
 				documents.GET("/:id/status", r.knowledgeHandler.GetDocumentStatus)
 			}
+		}
+
+		// 教案模板库路由
+		templates := v1.Group("/templates")
+		templates.Use(middleware.AuthMiddleware(r.jwtManager))
+		{
+			templates.GET("", r.templateHandler.List)
+			templates.GET("/:id", r.templateHandler.Get)
+			templates.POST("", r.templateHandler.Create)
+			templates.POST("/:id/apply", r.templateHandler.Apply)
+			templates.DELETE("/:id", r.templateHandler.Delete)
 		}
 	}
 }

@@ -2,6 +2,9 @@ import api from './index';
 import type {
   Lesson,
   LessonVersion,
+  LessonQualityReview,
+  LessonVersionDiff,
+  ExportLayout,
   LessonComment,
   LessonFavorite,
   ApiResponse,
@@ -83,6 +86,39 @@ export async function getLessonVersion(lessonId: string, version: number): Promi
  */
 export async function rollbackToVersion(lessonId: string, version: number): Promise<Lesson> {
   const response = await api.post<ApiResponse<Lesson>>(`/lessons/${lessonId}/versions/${version}/rollback`);
+  return response.data.data;
+}
+
+/**
+ * 获取教案质量审查结果
+ */
+export async function getLessonQualityReview(lessonId: string): Promise<LessonQualityReview> {
+  const response = await api.get<ApiResponse<LessonQualityReview>>(`/lessons/${lessonId}/quality-review`);
+  return response.data.data;
+}
+
+/**
+ * 获取教案版本差异
+ */
+export async function getLessonVersionDiff(
+  lessonId: string,
+  fromVersion: number | string,
+  toVersion: number | string = 'current'
+): Promise<LessonVersionDiff> {
+  const response = await api.get<ApiResponse<LessonVersionDiff>>(`/lessons/${lessonId}/versions/diff`, {
+    params: {
+      from: String(fromVersion),
+      to: String(toVersion),
+    },
+  });
+  return response.data.data;
+}
+
+/**
+ * 获取导出模板列表
+ */
+export async function getExportLayouts(): Promise<ExportLayout[]> {
+  const response = await api.get<ApiResponse<ExportLayout[]>>('/lessons/export/layouts');
   return response.data.data;
 }
 

@@ -2,8 +2,15 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useLessonStore } from '@/stores/lesson';
-import { getLessonVersion, getLessonVersions, rollbackToVersion } from '@/api/lesson';
-import type { LessonVersion } from '@/types';
+import {
+  getLessonVersion,
+  getLessonVersions,
+  rollbackToVersion,
+  getLessonQualityReview,
+  getLessonVersionDiff,
+  getExportLayouts,
+} from '@/api/lesson';
+import type { LessonVersion, LessonQualityReview, LessonVersionDiff, ExportLayout } from '@/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue';
 import {
   Edit,
@@ -34,9 +41,18 @@ const versionsLoading = ref(false);
 const previewLoading = ref(false);
 const previewDialogVisible = ref(false);
 const previewVersion = ref<LessonVersion | null>(null);
+const diffDialogVisible = ref(false);
+const diffLoading = ref(false);
+const versionDiff = ref<LessonVersionDiff | null>(null);
 
 const showExportMenu = ref(false);
 const exporting = ref(false);
+const exportLayouts = ref<ExportLayout[]>([]);
+const selectedExportLayout = ref('standard');
+
+const qualityLoading = ref(false);
+const qualityError = ref<string | null>(null);
+const qualityReview = ref<LessonQualityReview | null>(null);
 
 const favorites = ref<string[]>([]);
 
@@ -193,6 +209,72 @@ async function handlePreview(version: LessonVersion) {
   }
 }
 
+async function handleCompare(version: number) {
+  diffLoading.value = true;
+  diffDialogVisible.value = true;
+  versionDiff.value = null;
+
+  try {
+    versionDiff.value = await getLessonVersionDiff(lessonId.value, version, 'current');
+  } catch (err) {
+    diffDialogVisible.value = false;
+    ElMessage.error(err instanceof Error ? err.message : '版本对比失败');
+  } finally {
+    diffLoading.value = false;
+  }
+}
+
+async function loadExportLayouts() {
+  try {
+    exportLayouts.value = await getExportLayouts();
+    if (!exportLayouts.value.some(item => item.id === selectedExportLayout.value)) {
+      selectedExportLayout.value = exportLayouts.value[0]?.id || 'standard';
+    }
+  } catch {
+    exportLayouts.value = [
+      { id: 'standard', name: '标准模板', description: '通用教学文档结构' },
+      { id: 'compact', name: '紧凑模板', description: '关键要点优先展示' },
+      { id: 'research', name: '教研模板', description: '适合教研交流场景' },
+    ];
+  }
+}
+
+async function runQualityReview() {
+  qualityLoading.value = true;
+  qualityError.value = null;
+
+  try {
+    qualityReview.value = await getLessonQualityReview(lessonId.value);
+  } catch (err) {
+    qualityError.value = err instanceof Error ? err.message : '质量审查失败';
+    ElMessage.error(qualityError.value);
+  } finally {
+    qualityLoading.value = false;
+  }
+}
+
+function parseDownloadFilename(contentDisposition: string | null, fallback: string): string {
+  if (!contentDisposition) {
+    return fallback;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      // ignore decode error
+    }
+  }
+
+  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  if (plainMatch?.[1]) {
+    return plainMatch[1];
+  }
+
+  return fallback;
+}
+
 function handleClickOutside(event: MouseEvent) {
   const target = event.target as HTMLElement;
   if (!target.closest('.export-menu')) {
@@ -235,7 +317,11 @@ async function handleExport(format: 'md' | 'pdf' | 'docx') {
   exporting.value = true;
 
   try {
-    const response = await fetch(`/api/v1/lessons/${lessonId.value}/export?format=${format}`, {
+    const params = new URLSearchParams({
+      format,
+      layout: selectedExportLayout.value,
+    });
+    const response = await fetch(`/api/v1/lessons/${lessonId.value}/export?${params.toString()}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('auth') ? JSON.parse(localStorage.getItem('auth')!).token : ''}`,
       },
@@ -247,11 +333,7 @@ async function handleExport(format: 'md' | 'pdf' | 'docx') {
     }
 
     const contentDisposition = response.headers.get('Content-Disposition');
-    let filename = `${lesson.value.title}.${format}`;
-    if (contentDisposition) {
-      const match = contentDisposition.match(/filename="(.+)"/);
-      if (match) filename = match[1];
-    }
+    const filename = parseDownloadFilename(contentDisposition, `${lesson.value.title}.${format}`);
 
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -288,6 +370,7 @@ function parseJsonText(value: any): string {
 onMounted(() => {
   loadFavorites();
   lessonStore.fetchLesson(lessonId.value);
+  loadExportLayouts();
   document.addEventListener('click', handleClickOutside);
 });
 
@@ -328,6 +411,16 @@ onUnmounted(() => {
                 发布
               </el-button>
               <el-button :icon="Edit" @click="router.push(`/lessons/${lesson.id}/edit`)">编辑</el-button>
+              <el-button :loading="qualityLoading" @click="runQualityReview">质量审查</el-button>
+
+              <el-select v-model="selectedExportLayout" class="w-[140px]" size="default">
+                <el-option
+                  v-for="item in exportLayouts"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
 
               <el-dropdown trigger="click" @visible-change="(v:boolean)=>showExportMenu=v">
                 <el-button :icon="Download" :loading="exporting">导出</el-button>
@@ -378,6 +471,7 @@ onUnmounted(() => {
 
             <div class="version-item__actions">
               <el-button size="small" @click="handlePreview(v)">查看版本</el-button>
+              <el-button size="small" type="primary" @click="handleCompare(v.version)">对比当前</el-button>
               <el-button
                 size="small"
                 type="warning"
@@ -390,6 +484,99 @@ onUnmounted(() => {
           </el-card>
         </div>
       </el-card>
+
+      <el-card v-if="qualityReview" class="surface-card" shadow="never">
+        <template #header>
+          <div class="flex items-center justify-between gap-3">
+            <span class="font-semibold">质量审查结果</span>
+            <div class="flex items-center gap-2">
+              <el-tag :type="qualityReview.grade === 'A' ? 'success' : qualityReview.grade === 'B' ? 'warning' : 'danger'">
+                等级 {{ qualityReview.grade }}
+              </el-tag>
+              <el-tag size="small" effect="plain">
+                {{ qualityReview.total_score }} / {{ qualityReview.max_score }}
+              </el-tag>
+              <el-tag v-if="qualityReview.auto_approved" type="success" size="small">建议可发布</el-tag>
+            </div>
+          </div>
+        </template>
+
+        <el-alert
+          v-if="qualityError"
+          :title="qualityError"
+          type="warning"
+          show-icon
+          class="mb-3"
+        />
+
+        <el-table :data="qualityReview.dimensions" size="small" border>
+          <el-table-column prop="name" label="维度" min-width="120" />
+          <el-table-column label="得分" width="120">
+            <template #default="{ row }">
+              {{ row.score }} / {{ row.max_score }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="comment" label="说明" min-width="220" />
+        </el-table>
+
+        <div class="mt-4 grid md:grid-cols-2 gap-3">
+          <el-card shadow="never">
+            <template #header><span class="text-sm font-semibold">发现问题</span></template>
+            <ul class="list-disc pl-5 text-sm app-text-muted">
+              <li v-for="(issue, idx) in qualityReview.issues" :key="`issue-${idx}`">{{ issue }}</li>
+            </ul>
+          </el-card>
+          <el-card shadow="never">
+            <template #header><span class="text-sm font-semibold">优化建议</span></template>
+            <ul class="list-disc pl-5 text-sm app-text-muted">
+              <li v-for="(item, idx) in qualityReview.suggestions" :key="`suggestion-${idx}`">{{ item }}</li>
+            </ul>
+          </el-card>
+        </div>
+      </el-card>
+
+      <el-dialog v-model="diffDialogVisible" width="1000px" destroy-on-close>
+        <template #header>
+          <div class="font-semibold">
+            版本差异对比
+            <span v-if="versionDiff" class="text-xs app-text-muted ml-2">
+              {{ versionDiff.from_version }} -> {{ versionDiff.to_version }}（变更字段 {{ versionDiff.changed_fields }}）
+            </span>
+          </div>
+        </template>
+
+        <el-skeleton v-if="diffLoading" :rows="6" animated />
+        <el-empty v-else-if="!versionDiff" description="暂无差异数据" />
+        <div v-else class="space-y-3 max-h-[560px] overflow-y-auto pr-1">
+          <el-card
+            v-for="field in versionDiff.fields"
+            :key="field.field"
+            shadow="never"
+            class="border border-[var(--el-border-color-light)]"
+          >
+            <template #header>
+              <div class="flex items-center justify-between">
+                <span class="font-medium">{{ field.label }}</span>
+                <el-tag :type="field.changed ? 'warning' : 'success'" size="small">
+                  {{ field.changed ? '已变更' : '无变化' }}
+                </el-tag>
+              </div>
+            </template>
+
+            <div v-if="field.changed" class="grid md:grid-cols-2 gap-3">
+              <div>
+                <div class="text-xs app-text-muted mb-1">旧版本</div>
+                <pre class="diff-box">{{ field.before || '-' }}</pre>
+              </div>
+              <div>
+                <div class="text-xs app-text-muted mb-1">当前版本</div>
+                <pre class="diff-box">{{ field.after || '-' }}</pre>
+              </div>
+            </div>
+            <div v-else class="text-sm app-text-muted">该字段未变化</div>
+          </el-card>
+        </div>
+      </el-dialog>
 
       <el-dialog
         v-model="previewDialogVisible"
@@ -548,5 +735,20 @@ onUnmounted(() => {
 
 .version-preview-dialog :deep(.el-dialog__body) {
   padding-top: 8px;
+}
+
+.diff-box {
+  margin: 0;
+  min-height: 120px;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.45;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  padding: 10px;
+  background: var(--el-fill-color-light);
 }
 </style>

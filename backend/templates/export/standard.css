@@ -1,0 +1,19 @@
+body {
+  font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.6;
+  color: #1f2937;
+}
+
+h1, h2, h3 {
+  color: #0f172a;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #d1d5db;
+  padding: 6px 10px;
+}
+

@@ -143,6 +143,104 @@ export interface LessonVersion {
   createdAt: string;
 }
 
+export interface LessonQualityDimension {
+  key: string;
+  name: string;
+  score: number;
+  max_score: number;
+  comment: string;
+  importance: number;
+}
+
+export interface LessonQualityReview {
+  lesson_id: string;
+  total_score: number;
+  max_score: number;
+  grade: string;
+  dimensions: LessonQualityDimension[];
+  issues: string[];
+  suggestions: string[];
+  auto_approved: boolean;
+}
+
+export interface LessonVersionDiffField {
+  field: string;
+  label: string;
+  changed: boolean;
+  before?: string;
+  after?: string;
+  added?: string[];
+  removed?: string[];
+}
+
+export interface LessonVersionDiff {
+  lesson_id: string;
+  from_version: string;
+  to_version: string;
+  changed_fields: number;
+  fields: LessonVersionDiffField[];
+}
+
+export interface ExportLayout {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface LessonTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  subject?: string;
+  grade?: string;
+  duration?: number;
+  topic_hint?: string;
+  style?: string;
+  requirements?: string;
+  objectives?: string;
+  content_outline?: string;
+  activities?: string;
+  assessment?: string;
+  resources?: string;
+  tags?: string[];
+  built_in: boolean;
+  owner_id?: string;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateLessonTemplateRequest {
+  name: string;
+  description?: string;
+  category?: string;
+  subject?: string;
+  grade?: string;
+  duration?: number;
+  topic_hint?: string;
+  style?: string;
+  requirements?: string;
+  objectives?: string;
+  content_outline?: string;
+  activities?: string;
+  assessment?: string;
+  resources?: string;
+  tags?: string[];
+}
+
+export interface AppliedLessonTemplate {
+  template_id: string;
+  name: string;
+  subject?: string;
+  grade?: string;
+  duration?: number;
+  topic?: string;
+  style?: string;
+  requirements?: string;
+  tags?: string[];
+}
+
 // 评论相关类型
 export interface LessonComment {
   id: number;

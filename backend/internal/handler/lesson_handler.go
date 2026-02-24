@@ -27,6 +27,12 @@ type LessonHandler struct {
 	commentService  service.CommentService
 }
 
+type exportLayoutOption struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 // NewLessonHandler 创建教案处理器
 func NewLessonHandler(
 	lessonService service.LessonService,
@@ -40,6 +46,35 @@ func NewLessonHandler(
 		likeService:     likeService,
 		commentService:  commentService,
 	}
+}
+
+func availableExportLayouts() []exportLayoutOption {
+	return []exportLayoutOption{
+		{
+			ID:          "standard",
+			Name:        "标准模板",
+			Description: "通用教学文档结构，适合日常备课提交。",
+		},
+		{
+			ID:          "compact",
+			Name:        "紧凑模板",
+			Description: "更简洁的版面，强调关键结论与执行步骤。",
+		},
+		{
+			ID:          "research",
+			Name:        "教研模板",
+			Description: "适合教研分享，补充设计说明与反思提示。",
+		},
+	}
+}
+
+func isValidExportLayout(layout string) bool {
+	for _, item := range availableExportLayouts() {
+		if item.ID == layout {
+			return true
+		}
+	}
+	return false
 }
 
 // List 教案列表
@@ -518,6 +553,79 @@ func (h *LessonHandler) RollbackToVersion(c *gin.Context) {
 	Success(c, lesson)
 }
 
+// QualityReview 教案质量评分与自动审查。
+func (h *LessonHandler) QualityReview(c *gin.Context) {
+	userID, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "未认证", nil)
+		return
+	}
+
+	lessonID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		Error(c, http.StatusBadRequest, "无效的ID", nil)
+		return
+	}
+
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		Error(c, http.StatusUnauthorized, "无效的用户标识", nil)
+		return
+	}
+
+	report, err := h.lessonService.ReviewQuality(c.Request.Context(), lessonID, userUUID)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "质量审查失败", err.Error())
+		return
+	}
+
+	Success(c, report)
+}
+
+// DiffVersions 比较两个版本的差异。
+func (h *LessonHandler) DiffVersions(c *gin.Context) {
+	userID, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "未认证", nil)
+		return
+	}
+
+	lessonID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		Error(c, http.StatusBadRequest, "无效的ID", nil)
+		return
+	}
+
+	fromVersion := strings.TrimSpace(c.Query("from"))
+	toVersion := strings.TrimSpace(c.Query("to"))
+	if fromVersion == "" {
+		Error(c, http.StatusBadRequest, "缺少 from 版本号", nil)
+		return
+	}
+	if toVersion == "" {
+		toVersion = "current"
+	}
+
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		Error(c, http.StatusUnauthorized, "无效的用户标识", nil)
+		return
+	}
+
+	diff, err := h.lessonService.CompareVersions(c.Request.Context(), lessonID, userUUID, fromVersion, toVersion)
+	if err != nil {
+		Error(c, http.StatusBadRequest, "版本对比失败", err.Error())
+		return
+	}
+
+	Success(c, diff)
+}
+
+// ExportLayouts 返回可用导出模板。
+func (h *LessonHandler) ExportLayouts(c *gin.Context) {
+	Success(c, availableExportLayouts())
+}
+
 // Export 导出教案
 func (h *LessonHandler) Export(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -530,11 +638,19 @@ func (h *LessonHandler) Export(c *gin.Context) {
 	if format == "" {
 		format = "md"
 	}
+	layout := strings.TrimSpace(c.Query("layout"))
+	if layout == "" {
+		layout = "standard"
+	}
 
 	// 验证格式
 	validFormats := map[string]bool{"md": true, "pdf": true, "docx": true}
 	if !validFormats[format] {
 		Error(c, http.StatusBadRequest, "不支持的格式，请使用 md、pdf 或 docx", nil)
+		return
+	}
+	if !isValidExportLayout(layout) {
+		Error(c, http.StatusBadRequest, "不支持的模板，请使用 standard、compact 或 research", nil)
 		return
 	}
 
@@ -550,8 +666,8 @@ func (h *LessonHandler) Export(c *gin.Context) {
 		return
 	}
 
-	// 生成 Markdown 内容
-	mdContent := h.generateMarkdown(lesson)
+	// 生成 Markdown 内容（模板化版式）
+	mdContent := h.generateMarkdown(lesson, layout)
 
 	// 如果是 md 格式，直接返回
 	if format == "md" {
@@ -564,7 +680,7 @@ func (h *LessonHandler) Export(c *gin.Context) {
 	}
 
 	// 使用 pandoc 转换
-	outputFile, err := h.convertWithPandoc(mdContent, lesson.Title, format)
+	outputFile, err := h.convertWithPandoc(mdContent, lesson.Title, format, layout)
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "转换失败: "+err.Error(), nil)
 		return
@@ -590,84 +706,142 @@ func (h *LessonHandler) Export(c *gin.Context) {
 	c.File(outputFile)
 }
 
-// generateMarkdown 生成 Markdown 内容
-func (h *LessonHandler) generateMarkdown(lesson *model.LessonDetail) string {
+func extractLessonText(raw string) string {
+	if raw == "" || raw == "{}" {
+		return ""
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &data); err == nil {
+		if text, ok := data["text"].(string); ok {
+			return strings.TrimSpace(text)
+		}
+		return formatJSONContent(data)
+	}
+	return strings.TrimSpace(raw)
+}
+
+func sanitizeMarkdown(raw string) string {
+	value := extractLessonText(raw)
+	value = strings.ReplaceAll(value, "\n---\n", "\n\n---\n\n")
+
+	lines := strings.Split(value, "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "---" {
+			lines[i] = "* * *"
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// generateMarkdown 生成模板化 Markdown 内容。
+func (h *LessonHandler) generateMarkdown(lesson *model.LessonDetail, layout string) string {
+	objectives := sanitizeMarkdown(lesson.Objectives)
+	content := sanitizeMarkdown(lesson.Content)
+	activities := sanitizeMarkdown(lesson.Activities)
+	assessment := sanitizeMarkdown(lesson.Assessment)
+	resources := sanitizeMarkdown(lesson.Resources)
+
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# %s\n\n", lesson.Title))
-	sb.WriteString(fmt.Sprintf("**学科：** %s  \n", lesson.Subject))
-	sb.WriteString(fmt.Sprintf("**年级：** %s  \n", lesson.Grade))
-	sb.WriteString(fmt.Sprintf("**课时：** %d分钟  \n\n", lesson.Duration))
+	switch layout {
+	case "compact":
+		sb.WriteString(fmt.Sprintf("# %s\n\n", lesson.Title))
+		sb.WriteString("| 学科 | 年级 | 课时 |\n| --- | --- | --- |\n")
+		sb.WriteString(fmt.Sprintf("| %s | %s | %d 分钟 |\n\n", lesson.Subject, lesson.Grade, lesson.Duration))
 
-	// 从 JSON 格式中提取纯文本内容
-	extractText := func(s string) string {
-		if s == "" || s == "{}" {
-			return ""
+		if objectives != "" {
+			sb.WriteString("## 目标速览\n\n")
+			sb.WriteString(objectives + "\n\n")
 		}
-		// 尝试解析 JSON 格式 {"text": "..."}
-		var data map[string]interface{}
-		if err := json.Unmarshal([]byte(s), &data); err == nil {
-			if text, ok := data["text"].(string); ok {
-				return text
-			}
-			// 如果不是简单的 text 字段，返回格式化的内容
-			return formatJSONContent(data)
+		if content != "" {
+			sb.WriteString("## 内容主线\n\n")
+			sb.WriteString(content + "\n\n")
 		}
-		// 不是 JSON，直接返回原文
-		return s
-	}
-
-	// 清理内容中的 YAML 分隔符，避免 pandoc 解析问题
-	cleanContent := func(s string) string {
-		// 先提取文本
-		s = extractText(s)
-		// 将独立的 --- 替换为水平线 HTML 或其他安全格式
-		s = strings.ReplaceAll(s, "\n---\n", "\n\n---\n\n")
-		// 移除行首的 --- (可能被解析为 YAML)
-		lines := strings.Split(s, "\n")
-		for i, line := range lines {
-			if strings.TrimSpace(line) == "---" {
-				lines[i] = "* * *"
-			}
+		if activities != "" {
+			sb.WriteString("## 课堂执行步骤\n\n")
+			sb.WriteString(activities + "\n\n")
 		}
-		return strings.Join(lines, "\n")
-	}
+		if assessment != "" {
+			sb.WriteString("## 达成检测\n\n")
+			sb.WriteString(assessment + "\n\n")
+		}
+		if resources != "" {
+			sb.WriteString("## 资源清单\n\n")
+			sb.WriteString(resources + "\n\n")
+		}
 
-	if lesson.Objectives != "" {
-		sb.WriteString("## 教学目标\n\n")
-		sb.WriteString(cleanContent(lesson.Objectives))
-		sb.WriteString("\n\n")
-	}
+	case "research":
+		sb.WriteString(fmt.Sprintf("# %s（教研版）\n\n", lesson.Title))
+		sb.WriteString(fmt.Sprintf("**学科：** %s  \n", lesson.Subject))
+		sb.WriteString(fmt.Sprintf("**年级：** %s  \n", lesson.Grade))
+		sb.WriteString(fmt.Sprintf("**课时：** %d 分钟  \n", lesson.Duration))
+		sb.WriteString(fmt.Sprintf("**版本：** v%d  \n\n", lesson.Version))
 
-	if lesson.Content != "" {
-		sb.WriteString("## 教学内容\n\n")
-		sb.WriteString(cleanContent(lesson.Content))
+		sb.WriteString("## 一、教学目标\n\n")
+		sb.WriteString(orFallback(objectives, "待补充目标说明。"))
 		sb.WriteString("\n\n")
-	}
 
-	if lesson.Activities != "" {
-		sb.WriteString("## 教学活动\n\n")
-		sb.WriteString(cleanContent(lesson.Activities))
+		sb.WriteString("## 二、教学内容与重难点\n\n")
+		sb.WriteString(orFallback(content, "待补充内容说明。"))
 		sb.WriteString("\n\n")
-	}
 
-	if lesson.Assessment != "" {
-		sb.WriteString("## 教学评价\n\n")
-		sb.WriteString(cleanContent(lesson.Assessment))
+		sb.WriteString("## 三、教学活动设计\n\n")
+		sb.WriteString(orFallback(activities, "待补充活动设计。"))
 		sb.WriteString("\n\n")
-	}
 
-	if lesson.Resources != "" {
-		sb.WriteString("## 教学资源\n\n")
-		sb.WriteString(cleanContent(lesson.Resources))
+		sb.WriteString("## 四、评价方案\n\n")
+		sb.WriteString(orFallback(assessment, "待补充评价方案。"))
 		sb.WriteString("\n\n")
+
+		sb.WriteString("## 五、资源与保障\n\n")
+		sb.WriteString(orFallback(resources, "待补充资源配置。"))
+		sb.WriteString("\n\n")
+
+		sb.WriteString("## 六、教学设计说明（自动生成）\n\n")
+		sb.WriteString("- 建议围绕“目标-活动-评价”闭环进行同伴评审。\n")
+		sb.WriteString("- 建议在课堂后补充执行反馈与改进建议。\n\n")
+
+	default:
+		sb.WriteString(fmt.Sprintf("# %s\n\n", lesson.Title))
+		sb.WriteString(fmt.Sprintf("**学科：** %s  \n", lesson.Subject))
+		sb.WriteString(fmt.Sprintf("**年级：** %s  \n", lesson.Grade))
+		sb.WriteString(fmt.Sprintf("**课时：** %d分钟  \n\n", lesson.Duration))
+
+		if objectives != "" {
+			sb.WriteString("## 教学目标\n\n")
+			sb.WriteString(objectives + "\n\n")
+		}
+		if content != "" {
+			sb.WriteString("## 教学内容\n\n")
+			sb.WriteString(content + "\n\n")
+		}
+		if activities != "" {
+			sb.WriteString("## 教学活动\n\n")
+			sb.WriteString(activities + "\n\n")
+		}
+		if assessment != "" {
+			sb.WriteString("## 教学评价\n\n")
+			sb.WriteString(assessment + "\n\n")
+		}
+		if resources != "" {
+			sb.WriteString("## 教学资源\n\n")
+			sb.WriteString(resources + "\n\n")
+		}
 	}
 
 	return sb.String()
 }
 
+func orFallback(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
 // convertWithPandoc 使用 pandoc 转换文件
-func (h *LessonHandler) convertWithPandoc(mdContent, title, format string) (string, error) {
+func (h *LessonHandler) convertWithPandoc(mdContent, title, format, layout string) (string, error) {
 	// 创建临时目录
 	tmpDir, err := os.MkdirTemp("", "lesson-export-")
 	if err != nil {
@@ -699,6 +873,10 @@ func (h *LessonHandler) convertWithPandoc(mdContent, title, format string) (stri
 			"-o", outputFile,
 			"--pdf-engine=weasyprint",
 		)
+		cssFile := filepath.Join("templates", "export", layout+".css")
+		if _, err := os.Stat(cssFile); err == nil {
+			args = append(args, "--css", cssFile)
+		}
 	case "docx":
 		outputFile = filepath.Join(tmpDir, title+".docx")
 		args = append(baseArgs,

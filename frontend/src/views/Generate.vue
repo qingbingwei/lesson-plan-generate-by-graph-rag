@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useGenerationStore } from '@/stores/generation';
 import { useLessonStore } from '@/stores/lesson';
+import { applyLessonTemplate, listLessonTemplates } from '@/api/template';
+import type { LessonTemplate } from '@/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue';
 import { MagicStick, Refresh, DocumentAdd } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 
+const route = useRoute();
 const router = useRouter();
 const generationStore = useGenerationStore();
 const lessonStore = useLessonStore();
@@ -42,19 +46,74 @@ const styles = [
   { value: 'flipped', label: '翻转课堂' },
 ];
 
-const templates = [
-  { label: '小学数学 · 分数', subject: '数学', grade: '五年级', topic: '分数的加法和减法', duration: 40, style: 'interactive' },
-  { label: '初中语文 · 古诗', subject: '语文', grade: '七年级', topic: '唐诗三百首赏析', duration: 45, style: '' },
-  { label: '高中物理 · 力学', subject: '物理', grade: '高一', topic: '牛顿第二定律', duration: 45, style: 'lecture' },
+const fallbackTemplates = [
+  { name: '小学数学 · 分数', subject: '数学', grade: '五年级', topic_hint: '分数的加法和减法', duration: 40, style: 'interactive', requirements: '' },
+  { name: '初中语文 · 古诗', subject: '语文', grade: '七年级', topic_hint: '唐诗三百首赏析', duration: 45, style: '', requirements: '' },
+  { name: '高中物理 · 力学', subject: '物理', grade: '高一', topic_hint: '牛顿第二定律', duration: 45, style: 'lecture', requirements: '' },
 ];
 
-function applyTemplate(tpl: typeof templates[number]) {
-  form.value.subject = tpl.subject;
-  form.value.grade = tpl.grade;
-  form.value.topic = tpl.topic;
-  form.value.duration = tpl.duration;
-  form.value.style = tpl.style;
-  form.value.requirements = '';
+const quickTemplates = ref<LessonTemplate[]>([]);
+const templatesLoading = ref(false);
+const templateLoadError = ref<string | null>(null);
+
+function applyTemplate(tpl: Pick<LessonTemplate, 'subject' | 'grade' | 'topic_hint' | 'duration' | 'style' | 'requirements'>) {
+  form.value.subject = tpl.subject || '';
+  form.value.grade = tpl.grade || '';
+  form.value.topic = tpl.topic_hint || '';
+  form.value.duration = tpl.duration || 45;
+  form.value.style = tpl.style || '';
+  form.value.requirements = tpl.requirements || '';
+}
+
+async function loadQuickTemplates() {
+  templatesLoading.value = true;
+  templateLoadError.value = null;
+
+  try {
+    const templates = await listLessonTemplates();
+    quickTemplates.value = templates.slice(0, 6);
+  } catch (err) {
+    templateLoadError.value = err instanceof Error ? err.message : '加载模板失败';
+    quickTemplates.value = fallbackTemplates.map((item, index) => ({
+      id: `fallback-${index}`,
+      name: item.name,
+      subject: item.subject,
+      grade: item.grade,
+      topic_hint: item.topic_hint,
+      duration: item.duration,
+      style: item.style,
+      requirements: item.requirements,
+      built_in: true,
+      usage_count: 0,
+      created_at: '',
+      updated_at: '',
+    }));
+  } finally {
+    templatesLoading.value = false;
+  }
+}
+
+async function applyTemplateFromQuery() {
+  const templateIdRaw = route.query.templateId;
+  const templateId = typeof templateIdRaw === 'string' ? templateIdRaw.trim() : '';
+  if (!templateId) {
+    return;
+  }
+
+  try {
+    const payload = await applyLessonTemplate(templateId);
+    applyTemplate({
+      subject: payload.subject,
+      grade: payload.grade,
+      topic_hint: payload.topic,
+      duration: payload.duration,
+      style: payload.style,
+      requirements: payload.requirements,
+    });
+    ElMessage.success(`已应用模板：${payload.name}`);
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '应用模板失败');
+  }
 }
 
 const isGenerating = computed(() => generationStore.isGenerating);
@@ -134,6 +193,11 @@ async function handleSave() {
 function handleRegenerate() {
   generationStore.reset();
 }
+
+onMounted(async () => {
+  await loadQuickTemplates();
+  await applyTemplateFromQuery();
+});
 </script>
 
 <template>
@@ -145,17 +209,25 @@ function handleRegenerate() {
 
     <el-card class="surface-card" shadow="never">
       <template #header>
-        <div class="font-semibold">快速模板</div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="font-semibold">模板库快速复用</span>
+          <el-button size="small" text @click="router.push('/templates')">进入模板中心</el-button>
+        </div>
       </template>
-      <div class="flex flex-wrap gap-2">
+      <el-skeleton v-if="templatesLoading" :rows="2" animated />
+      <div v-else class="flex flex-wrap gap-2">
         <el-button
-          v-for="tpl in templates"
-          :key="tpl.label"
+          v-for="tpl in quickTemplates"
+          :key="tpl.id"
           plain
           @click="applyTemplate(tpl)"
         >
-          {{ tpl.label }}
+          {{ tpl.name }}
         </el-button>
+        <span v-if="quickTemplates.length === 0" class="text-sm app-text-muted">暂无可用模板，请先在模板中心创建。</span>
+      </div>
+      <div v-if="templateLoadError" class="text-xs app-text-muted mt-2">
+        {{ templateLoadError }}，已回退到内置快速模板。
       </div>
     </el-card>
 

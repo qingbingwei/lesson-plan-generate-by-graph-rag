@@ -62,6 +62,8 @@ type LessonService interface {
 	ListVersions(ctx context.Context, lessonID uuid.UUID, userID uuid.UUID) ([]model.LessonVersion, error)
 	GetVersion(ctx context.Context, lessonID uuid.UUID, version int, userID uuid.UUID) (*model.LessonVersion, error)
 	RollbackToVersion(ctx context.Context, lessonID uuid.UUID, version int, userID uuid.UUID) (*model.Lesson, error)
+	ReviewQuality(ctx context.Context, lessonID uuid.UUID, userID uuid.UUID) (*LessonQualityReview, error)
+	CompareVersions(ctx context.Context, lessonID uuid.UUID, userID uuid.UUID, fromVersion, toVersion string) (*LessonVersionDiff, error)
 }
 
 // lessonService 教案服务实现

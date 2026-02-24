@@ -101,16 +101,18 @@ func main() {
 	generationService := service.NewGenerationService(generationRepo, lessonRepo, &cfg.Agent)
 	knowledgeService := service.NewKnowledgeService(knowledgeRepo, &cfg.Agent)
 	documentService := service.NewDocumentService(documentRepo, &cfg.Agent)
+	templateService := service.NewTemplateService("data/lesson_templates.json")
 
 	// 初始化Handler
 	authHandler := handler.NewAuthHandler(authService, userService)
 	userHandler := handler.NewUserHandler(userService)
 	lessonHandler := handler.NewLessonHandler(lessonService, favoriteService, likeService, commentService)
+	templateHandler := handler.NewTemplateHandler(templateService)
 	generationHandler := handler.NewGenerationHandler(generationService, knowledgeService)
 	knowledgeHandler := handler.NewKnowledgeHandler(documentService)
 
 	// 初始化路由
-	router := handler.NewRouter(authHandler, userHandler, lessonHandler, generationHandler, knowledgeHandler, cfg, jwtManager)
+	router := handler.NewRouter(authHandler, userHandler, lessonHandler, templateHandler, generationHandler, knowledgeHandler, cfg, jwtManager)
 
 	// 设置Gin模式
 	if cfg.App.Env == "production" {
