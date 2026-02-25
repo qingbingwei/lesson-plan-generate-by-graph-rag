@@ -11,7 +11,7 @@ import {
   CircleCheck,
 } from '@element-plus/icons-vue';
 import {
-  getLangSmithUsage,
+  getTokenUsageBundle,
   type DashboardStats,
   type GenerationHistoryItem,
   type LangSmithUsageResponse,
@@ -180,7 +180,7 @@ function persistUsageCache(payload: LangSmithUsageResponse) {
 }
 
 function extractErrorMessage(error: unknown): string {
-  let message = '加载 LangSmith Token 数据失败';
+  let message = '加载 Token 数据失败';
 
   if (axios.isAxiosError(error)) {
     const responseData = error.response?.data as { message?: string; data?: unknown } | undefined;
@@ -212,7 +212,7 @@ async function loadLangSmithUsage(options: { silent?: boolean } = {}) {
   historyLoading.value = true;
 
   try {
-    const result = await getLangSmithUsage(page.value, pageSize.value);
+    const result = await getTokenUsageBundle(page.value, pageSize.value);
     applyUsagePayload(result);
     persistUsageCache(result);
     isUsingCachedData.value = false;
@@ -222,7 +222,7 @@ async function loadLangSmithUsage(options: { silent?: boolean } = {}) {
 
     if (isUsingCachedData.value || stats.value !== null) {
       console.warn('[TokenUsage] refresh failed:', message);
-      ElMessage.info('LangSmith 同步较慢，当前先展示最近缓存数据');
+      ElMessage.info('实时同步失败，当前先展示最近缓存数据');
     } else {
       ElMessage.error(message);
     }
@@ -276,7 +276,7 @@ onMounted(() => {
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">Token 使用与 API Key 配置</h1>
-      <p class="page-subtitle">以下 Token 统计全部来自 LangSmith Trace，并支持手动配置生成与 Embedding 的 API Key</p>
+      <p class="page-subtitle">Token 统计优先来自 LangSmith Trace，异常时自动回退到本地生成记录，并支持手动配置生成与 Embedding 的 API Key</p>
       <p v-if="isUsingCachedData" class="text-xs app-text-muted mt-1">已优先展示最近缓存数据，正在后台同步 LangSmith...</p>
       <p v-else-if="lastSyncedAt" class="text-xs app-text-muted mt-1">最近同步：{{ formatDate(lastSyncedAt) }}</p>
     </div>

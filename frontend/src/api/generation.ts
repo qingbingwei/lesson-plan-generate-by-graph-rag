@@ -73,11 +73,49 @@ export interface GenerationHistoryResponse {
   totalPages: number;
 }
 
+type RawGenerationHistoryResponse = {
+  items?: GenerationHistoryItem[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  pageSize?: number;
+  total_pages?: number;
+  totalPages?: number;
+};
+
 export interface LangSmithUsageResponse {
   source: string;
   project?: string;
   stats: DashboardStats;
   history: GenerationHistoryResponse;
+}
+
+function normalizeHistory(raw: RawGenerationHistoryResponse, fallbackPage: number, fallbackPageSize: number): GenerationHistoryResponse {
+  const total = Number(raw.total || 0);
+  const resolvedPage = Number(raw.page || fallbackPage || 1);
+  const resolvedPageSize = Number(raw.pageSize || raw.page_size || fallbackPageSize || 10);
+  const resolvedTotalPages = Number(
+    raw.totalPages || raw.total_pages || (resolvedPageSize > 0 ? Math.ceil(total / resolvedPageSize) : 0)
+  );
+
+  return {
+    items: Array.isArray(raw.items) ? raw.items : [],
+    total,
+    page: resolvedPage > 0 ? resolvedPage : 1,
+    pageSize: resolvedPageSize > 0 ? resolvedPageSize : 10,
+    totalPages: resolvedTotalPages >= 0 ? resolvedTotalPages : 0,
+  };
+}
+
+export async function getGenerationHistory(page: number = 1, pageSize: number = 10): Promise<GenerationHistoryResponse> {
+  const response = await api.get<ApiResponse<RawGenerationHistoryResponse>>('/generate/history', {
+    params: {
+      page,
+      page_size: pageSize,
+    },
+  });
+
+  return normalizeHistory(response.data.data || {}, page, pageSize);
 }
 
 export async function getLangSmithUsage(page: number = 1, pageSize: number = 10): Promise<LangSmithUsageResponse> {
@@ -89,7 +127,10 @@ export async function getLangSmithUsage(page: number = 1, pageSize: number = 10)
       },
     });
 
-    return response.data.data;
+    return {
+      ...response.data.data,
+      history: normalizeHistory(response.data.data?.history || {}, page, pageSize),
+    };
   } catch (error) {
     const statusCode = axios.isAxiosError(error) ? error.response?.status : undefined;
 
@@ -124,7 +165,32 @@ export async function getLangSmithUsage(page: number = 1, pageSize: number = 10)
       source: fallback.data.source || 'langsmith',
       project: fallback.data.project,
       stats: fallback.data.stats,
-      history: fallback.data.history,
+      history: normalizeHistory(fallback.data.history || {}, page, pageSize),
     };
+  }
+}
+
+export async function getTokenUsageBundle(
+  page: number = 1,
+  pageSize: number = 10,
+  options?: { fallbackStats?: DashboardStats }
+): Promise<LangSmithUsageResponse> {
+  try {
+    return await getLangSmithUsage(page, pageSize);
+  } catch (langSmithError) {
+    try {
+      const stats = options?.fallbackStats || (await getGenerationStats());
+      const history = await getGenerationHistory(page, pageSize).catch(() =>
+        normalizeHistory({}, page, pageSize)
+      );
+
+      return {
+        source: 'generation_db',
+        stats,
+        history,
+      };
+    } catch {
+      throw langSmithError;
+    }
   }
 }

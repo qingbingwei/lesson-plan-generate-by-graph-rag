@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useLessonStore } from '@/stores/lesson';
-import { getGenerationStats, type DashboardStats } from '@/api/generation';
+import { getGenerationStats, getTokenUsageBundle, type DashboardStats } from '@/api/generation';
 import { MagicStick, Document, DataAnalysis, Histogram, Plus, Star, StarFilled, Close } from '@element-plus/icons-vue';
 
 const router = useRouter();
@@ -105,13 +105,34 @@ onMounted(async () => {
   loadFavorites();
   lessonStore.fetchLessons({ page: 1, pageSize: 5 });
 
+  let baseStats: DashboardStats | null = null;
+
   try {
-    statsData.value = await getGenerationStats();
+    baseStats = await getGenerationStats();
   } catch {
     // noop
-  } finally {
-    statsLoading.value = false;
   }
+
+  try {
+    const usageBundle = await getTokenUsageBundle(1, 10, {
+      fallbackStats: baseStats || undefined,
+    });
+    const tokenStats = usageBundle.stats;
+
+    statsData.value = {
+      total_count: baseStats?.total_count ?? tokenStats.total_count ?? 0,
+      completed_count: baseStats?.completed_count ?? tokenStats.completed_count ?? 0,
+      failed_count: baseStats?.failed_count ?? tokenStats.failed_count ?? 0,
+      total_tokens: tokenStats.total_tokens ?? baseStats?.total_tokens ?? 0,
+      avg_duration_ms: baseStats?.avg_duration_ms ?? tokenStats.avg_duration_ms ?? 0,
+      this_month_generations: baseStats?.this_month_generations ?? tokenStats.this_month_generations ?? 0,
+      total_lessons: baseStats?.total_lessons ?? tokenStats.total_lessons ?? 0,
+    };
+  } catch {
+    statsData.value = baseStats;
+  }
+
+  statsLoading.value = false;
 });
 </script>
 
