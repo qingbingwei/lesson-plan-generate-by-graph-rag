@@ -117,32 +117,6 @@ export interface GraphRAGConfig {
   searchDepth: number;
 }
 
-// 工作流状态
-export interface WorkflowState {
-  // 输入
-  input: GenerateLessonRequest;
-  
-  // 中间状态
-  knowledgeContext?: KnowledgeContext[];
-  lessonObjectives?: LessonObjectives;
-  keyPoints?: string[];
-  difficultPoints?: string[];
-  teachingMethods?: string[];
-  sections?: LessonSection[];
-  materials?: string[];
-  homework?: string;
-  evaluation?: string;
-  
-  // 输出
-  output?: GeneratedLesson;
-  error?: string;
-  
-  // 元数据
-  usage?: TokenUsage;
-  startTime?: number;
-  endTime?: number;
-}
-
 // DeepSeek消息类型
 export interface DeepSeekMessage {
   role: 'system' | 'user' | 'assistant';

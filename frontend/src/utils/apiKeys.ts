@@ -1,9 +1,9 @@
-export const GENERATION_API_KEY_HEADER = 'X-Generation-Api-Key';
-export const EMBEDDING_API_KEY_HEADER = 'X-Embedding-Api-Key';
+const GENERATION_API_KEY_HEADER = 'X-Generation-Api-Key';
+const EMBEDDING_API_KEY_HEADER = 'X-Embedding-Api-Key';
 
 const API_KEY_STORAGE = 'lesson-plan:api-keys';
 
-export interface ApiKeySettings {
+interface ApiKeySettings {
   generationApiKey: string;
   embeddingApiKey: string;
   updatedAt: string;

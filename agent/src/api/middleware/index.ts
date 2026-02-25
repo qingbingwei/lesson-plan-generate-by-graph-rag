@@ -137,7 +137,7 @@ function normalizeJsonPayload(body: unknown, statusCode: number, traceId: string
   return payload;
 }
 
-export function getTraceId(req: Request, res?: Response): string {
+function getTraceId(req: Request, res?: Response): string {
   const fromLocals = res?.locals?.traceId;
   if (typeof fromLocals === 'string' && fromLocals.trim()) {
     return fromLocals;
