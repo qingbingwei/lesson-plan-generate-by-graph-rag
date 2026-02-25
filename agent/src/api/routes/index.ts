@@ -2,10 +2,8 @@ import { Router } from 'express';
 import {
   healthCheck,
   generateLesson,
-  streamGenerateLesson,
   buildGraph,
   deleteDocumentNodes,
-  regenerateSection,
   queryKnowledge,
   getKnowledgeSubgraph,
   createEmbedding,
@@ -31,10 +29,8 @@ router.get('/metrics', (_req, res) => {
 
 // 教案生成
 router.post('/api/generate', generateLesson);
-router.post('/api/generate/stream', streamGenerateLesson);
 router.post('/api/assistant/chat', chatAssistant);
 router.post('/api/quality-review', reviewLessonQuality);
-router.post('/api/regenerate-section', regenerateSection);
 router.post('/api/embedding', createEmbedding);
 
 // 知识图谱

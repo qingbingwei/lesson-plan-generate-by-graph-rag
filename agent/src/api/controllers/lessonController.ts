@@ -3,7 +3,7 @@ import { Client as LangSmithClient } from 'langsmith';
 import type { Run as LangSmithRun } from 'langsmith/schemas';
 import config from '../../config';
 import logger from '../../shared/utils/logger';
-import { runLessonAgent, streamLessonAgent } from '../../modules/lesson/agent/lessonAgent';
+import { runLessonAgent } from '../../modules/lesson/agent/lessonAgent';
 import { runBuildGraphWorkflow, BuildGraphRequest } from '../../modules/knowledge/workflows/buildGraphWorkflow';
 import { getDeepSeekClient } from '../../infrastructure/clients/deepseek';
 import {
@@ -12,7 +12,7 @@ import {
   EMBEDDING_API_KEY_HEADER,
   type RequestApiKeyOverrides,
 } from '../../shared/context/requestApiKeys';
-import type { DeepSeekMessage, GenerateLessonRequest, RegenerateSectionRequest } from '../../shared/types';
+import type { DeepSeekMessage, GenerateLessonRequest } from '../../shared/types';
 
 /**
  * 健康检查
@@ -669,56 +669,6 @@ export async function generateLesson(req: Request, res: Response) {
 }
 
 /**
- * 流式生成教案
- */
-export async function streamGenerateLesson(req: Request, res: Response) {
-  try {
-    const request = req.body as GenerateLessonRequest;
-
-    if (!request.subject || !request.grade || !request.topic || !request.duration) {
-      res.status(400).json({
-        success: false,
-        error: '缺少必要参数：subject, grade, topic, duration',
-      });
-      return;
-    }
-
-    // 设置 SSE 响应头
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    logger.info('Stream generate lesson request', {
-      subject: request.subject,
-      topic: request.topic,
-    });
-
-    const apiKeyOverrides = resolveApiKeyOverrides(req);
-
-    await withRequestApiKeys(apiKeyOverrides, async () => {
-      for await (const event of streamLessonAgent(request)) {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      }
-    });
-
-    res.write('data: [DONE]\n\n');
-    res.end();
-  } catch (error) {
-    logger.error('Stream generate lesson error', { error });
-
-    if (!res.headersSent) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    } else {
-      res.write(`data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Stream error' })}\n\n`);
-      res.end();
-    }
-  }
-}
-
-/**
  * 构建知识图谱
  */
 export async function buildGraph(req: Request, res: Response) {
@@ -785,57 +735,6 @@ export async function deleteDocumentNodes(req: Request, res: Response) {
     });
   }
 }
-
-/**
- * 重新生成某个环节
- */
-export async function regenerateSection(req: Request, res: Response) {
-  try {
-    const request = req.body as RegenerateSectionRequest;
-
-    if (!request.lessonId || !request.section || !request.context) {
-      res.status(400).json({
-        success: false,
-        error: '缺少必要参数：lessonId, section, context',
-      });
-      return;
-    }
-
-    logger.info('Regenerate section request', {
-      lessonId: request.lessonId,
-      section: request.section,
-    });
-
-    const apiKeyOverrides = resolveApiKeyOverrides(req);
-
-    const { content, usage } = await withRequestApiKeys(apiKeyOverrides, async () => {
-      const deepseek = getDeepSeekClient();
-      const prompt = buildRegenerationPrompt(request);
-      return deepseek.chat(
-        [
-          { role: 'system', content: '你是一位经验丰富的教学设计专家。请根据用户的要求重新生成教案的指定部分。' },
-          { role: 'user', content: prompt },
-        ],
-        { temperature: 0.7 }
-      );
-    });
-
-    res.json({
-      success: true,
-      section: request.section,
-      content,
-      usage,
-    });
-  } catch (error) {
-    logger.error('Regenerate section error', { error });
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
-  }
-}
-
-
 
 export async function chatAssistant(req: Request, res: Response) {
   try {
@@ -1209,31 +1108,4 @@ export async function getLangSmithTokenUsage(req: Request, res: Response) {
       error: error instanceof Error ? error.message : 'Internal server error',
     });
   }
-}
-
-/**
- * 构建重新生成提示词
- */
-function buildRegenerationPrompt(request: RegenerateSectionRequest): string {
-  const { section, context } = request;
-  const { subject, grade, topic, duration, current } = context;
-
-  let prompt = `请为以下课程重新生成"${section}"部分：
-
-基本信息：
-- 学科：${subject}
-- 年级：${grade}
-- 课题：${topic}
-- 课时：${duration}分钟
-
-`;
-
-  if (current && Object.keys(current).length > 0) {
-    prompt += `当前内容（需要改进）：
-${JSON.stringify(current, null, 2)}
-
-请生成更好的版本。`;
-  }
-
-  return prompt;
 }
