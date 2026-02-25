@@ -34,28 +34,6 @@ export async function generateLesson(
   return response.data.data;
 }
 
-/**
- * 重新生成某个环节
- */
-export async function regenerateSection(
-  lessonId: string,
-  section: string,
-  context: {
-    subject: string;
-    grade: string;
-    topic: string;
-    duration: number;
-    current: Record<string, unknown>;
-  }
-): Promise<{ section: string; content: Record<string, unknown> }> {
-  const response = await api.post<ApiResponse<{ section: string; content: Record<string, unknown> }>>('/generate/regenerate-section', {
-    lessonId,
-    section,
-    context,
-  });
-  return response.data.data;
-}
-
 // 统计数据结构（与后端GenerationStats对应）
 export interface DashboardStats {
   total_count: number;

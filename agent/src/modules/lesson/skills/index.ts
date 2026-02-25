@@ -20,7 +20,6 @@ export type Skill = z.infer<typeof SkillSchema>;
 export {
   knowledgeRetrievalSkill,
   retrieveKnowledge,
-  getKnowledgeDetail,
 } from './knowledgeRetrieval';
 
 // 教学目标生成 Skill

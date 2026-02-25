@@ -115,35 +115,3 @@ export async function retrieveKnowledge(
     throw error;
   }
 }
-
-/**
- * 获取单个知识点的详细信息
- */
-export async function getKnowledgeDetail(
-  knowledgeId: string
-): Promise<KnowledgeContext | null> {
-  try {
-    const graphRAG = getGraphRAGInstance();
-    const subgraph = await graphRAG.getKnowledgeSubgraph(knowledgeId, 1);
-
-    if (!subgraph.nodes || subgraph.nodes.length === 0) {
-      return null;
-    }
-
-    const node = subgraph.nodes[0] as {
-      id: string;
-      name: string;
-      properties?: Record<string, unknown>;
-    };
-
-    return {
-      id: node.id,
-      name: node.name,
-      content: String(node.properties?.content || node.properties?.description || ''),
-      source: 'knowledge_graph',
-    };
-  } catch (error) {
-    logger.error('Failed to get knowledge detail', { error, knowledgeId });
-    return null;
-  }
-}
