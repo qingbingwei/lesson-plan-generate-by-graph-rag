@@ -71,19 +71,6 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
-// 重新生成环节请求
-export interface RegenerateSectionRequest {
-  lessonId: string;
-  section: string;
-  context: {
-    subject: string;
-    grade: string;
-    topic: string;
-    duration: number;
-    current: Record<string, unknown>;
-  };
-}
-
 // 知识点
 export interface KnowledgePoint {
   id: string;
@@ -111,12 +98,6 @@ export interface KnowledgeLink {
   target: string;
   type: string;
   properties?: Record<string, unknown>;
-}
-
-// 知识图谱数据
-export interface KnowledgeGraphData {
-  nodes: KnowledgeNode[];
-  links: KnowledgeLink[];
 }
 
 // 搜索结果

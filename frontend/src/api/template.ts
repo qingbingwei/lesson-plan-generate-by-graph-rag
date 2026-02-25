@@ -11,11 +11,6 @@ export async function listLessonTemplates(): Promise<LessonTemplate[]> {
   return response.data.data;
 }
 
-export async function getLessonTemplate(id: string): Promise<LessonTemplate> {
-  const response = await api.get<ApiResponse<LessonTemplate>>(`/templates/${id}`);
-  return response.data.data;
-}
-
 export async function createLessonTemplate(payload: CreateLessonTemplateRequest): Promise<LessonTemplate> {
   const response = await api.post<ApiResponse<LessonTemplate>>('/templates', payload);
   return response.data.data;
@@ -29,4 +24,3 @@ export async function applyLessonTemplate(id: string): Promise<AppliedLessonTemp
   const response = await api.post<ApiResponse<AppliedLessonTemplate>>(`/templates/${id}/apply`);
   return response.data.data;
 }
-

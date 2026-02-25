@@ -5,8 +5,6 @@ import type {
   LessonQualityReview,
   LessonVersionDiff,
   ExportLayout,
-  LessonComment,
-  LessonFavorite,
   ApiResponse,
   PaginatedResponse,
   PaginationParams,
@@ -161,76 +159,4 @@ export async function getLessonVersionDiff(
 export async function getExportLayouts(): Promise<ExportLayout[]> {
   const response = await api.get<ApiResponse<ExportLayout[]>>('/lessons/export/layouts');
   return response.data.data;
-}
-
-/**
- * 获取教案评论
- */
-export async function getLessonComments(lessonId: number): Promise<LessonComment[]> {
-  const response = await api.get<ApiResponse<LessonComment[]>>(`/lessons/${lessonId}/comments`);
-  return response.data.data;
-}
-
-/**
- * 添加评论
- */
-export async function addComment(
-  lessonId: number, 
-  data: { content: string; parentId?: number }
-): Promise<LessonComment> {
-  const response = await api.post<ApiResponse<LessonComment>>(
-    `/lessons/${lessonId}/comments`, 
-    data
-  );
-  return response.data.data;
-}
-
-/**
- * 删除评论
- */
-export async function deleteComment(lessonId: number, commentId: number): Promise<void> {
-  await api.delete(`/lessons/${lessonId}/comments/${commentId}`);
-}
-
-/**
- * 收藏教案
- */
-export async function favoriteLesson(lessonId: number): Promise<LessonFavorite> {
-  const response = await api.post<ApiResponse<LessonFavorite>>(`/lessons/${lessonId}/favorite`);
-  return response.data.data;
-}
-
-/**
- * 取消收藏
- */
-export async function unfavoriteLesson(lessonId: number): Promise<void> {
-  await api.delete(`/lessons/${lessonId}/favorite`);
-}
-
-/**
- * 获取我的收藏
- */
-export async function getMyFavorites(params?: PaginationParams): Promise<PaginatedResponse<Lesson>> {
-  const response = await api.get<ApiResponse<PaginatedResponse<Lesson>>>('/user/favorites', { params });
-  return response.data.data;
-}
-
-/**
- * 导出教案为 Word
- */
-export async function exportLessonAsWord(lessonId: number): Promise<Blob> {
-  const response = await api.get(`/lessons/${lessonId}/export/word`, {
-    responseType: 'blob',
-  });
-  return response.data;
-}
-
-/**
- * 导出教案为 PDF
- */
-export async function exportLessonAsPdf(lessonId: number): Promise<Blob> {
-  const response = await api.get(`/lessons/${lessonId}/export/pdf`, {
-    responseType: 'blob',
-  });
-  return response.data;
 }

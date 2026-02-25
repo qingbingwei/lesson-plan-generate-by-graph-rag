@@ -106,13 +106,6 @@ export interface GenerateLessonRequest {
   requirements?: string;
 }
 
-export interface GenerateLessonResponse {
-  success: boolean;
-  data?: GeneratedLesson;
-  error?: string;
-  usage?: TokenUsage;
-}
-
 export interface GeneratedLesson {
   title: string;
   objectives: LessonObjectives;
@@ -241,28 +234,6 @@ export interface AppliedLessonTemplate {
   tags?: string[];
 }
 
-// 评论相关类型
-export interface LessonComment {
-  id: number;
-  lessonId: number;
-  userId: number;
-  user?: User;
-  content: string;
-  parentId?: number;
-  replies?: LessonComment[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-// 收藏相关类型
-export interface LessonFavorite {
-  id: number;
-  lessonId: number;
-  userId: number;
-  lesson?: Lesson;
-  createdAt: string;
-}
-
 // 知识图谱相关类型
 export interface KnowledgeNode {
   id: string;
@@ -286,11 +257,6 @@ export interface KnowledgeLink {
   target: string;
   type: string;
   properties?: Record<string, unknown>;
-}
-
-export interface KnowledgeGraphData {
-  nodes: KnowledgeNode[];
-  links: KnowledgeLink[];
 }
 
 export interface KnowledgePoint {
@@ -327,33 +293,4 @@ export interface PaginationParams {
   pageSize?: number;
   sort?: string;
   order?: 'asc' | 'desc';
-}
-
-// 表单相关类型
-export interface FormField {
-  label: string;
-  name: string;
-  type: 'text' | 'number' | 'select' | 'textarea' | 'checkbox' | 'radio';
-  placeholder?: string;
-  required?: boolean;
-  options?: { label: string; value: string | number }[];
-  validation?: (value: unknown) => string | undefined;
-}
-
-// 通知相关类型
-export interface Notification {
-  id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  title: string;
-  message?: string;
-  duration?: number;
-}
-
-// 模态框相关类型
-export interface ModalState {
-  isOpen: boolean;
-  title?: string;
-  content?: string;
-  onConfirm?: () => void;
-  onCancel?: () => void;
 }
